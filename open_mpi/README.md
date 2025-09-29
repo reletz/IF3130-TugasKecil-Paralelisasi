@@ -29,6 +29,24 @@
 9. [How to Run](#9-how-to-run)  
 
 
+## 0. Prerequisites
+Kita pakai NixOS karena males copas config satu-satu ke tiap VM-nya.
+
+Jadi caranya gini:
+- Install dulu Nix Package Manager
+```
+sudo pacman -Sy nix
+```
+
+atau
+
+```
+sudo apt-get install nix
+```
+
+Jangan lupa masukin ke Path
+
+- Udah sih good to go harusnya tinggal jalanin make-make nya.
 
 ## 1. Introduction
 Provide a short description of the purpose of this assignment, the Sobel edge detection algorithm in the given code, and the goal of applying OpenMPI parallelization.
