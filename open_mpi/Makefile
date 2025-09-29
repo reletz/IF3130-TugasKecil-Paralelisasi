@@ -1,27 +1,143 @@
-.PHONY: all build run clean_build_artifacts
+# MPI Cluster Manager Makefile
+# Jalanin di Host
 
-# Default path SSH Public Key. Ubah kalau beda :)
-SSH_KEY_PATH = ${HOME}/.ssh/id_ed25519.pub
+# === COMMAND ===
+# make up         		- Build (kalau perlu) dan jalanin semua VM
+# make down       		- Matiin semua VM yang lagi jalan
+# make clean      		- Matiin semua VM dan bersihin isinya
+# make ssh-<nama mesin> - Melakukan SSH ke node yang dipilih
+# make status     		- Nampilin status tiap VM (Jalan + PID atau ga jalan samsek)
 
-CLUSTER_PACKAGE = cluster-vms
-RUNNER = ./result/bin/run-master-vm
-TARGET_EXEC = mpi
+# Variabel
+VM_NAMES := master worker1 worker2 worker3 # Tetap di sini untuk referensi
+HOST_SSH_PUB_KEY_PATH := ${HOME}/.ssh/id_ed25519.pub
 
-# 1. BUILD VM (HOST)
-# Target buat build semua VM
-build:
-	@echo "--- 1. EXPORTING SSH KEY FOR NIX BUILD ---"
-	export SSH_PUBKEY_PATH=$(SSH_KEY_PATH) && \
-	echo "Using key: $${SSH_PUBKEY_PATH}"
-	
-	@echo "--- 2. BUILDING MPI CLUSTER VM IMAGES ---"
-	export SSH_PUBKEY_PATH=$(SSH_KEY_PATH) && \
-	nix build .#$(CLUSTER_PACKAGE) --impure
+.PHONY: all up down clean build check-ssh-key
+.PHONY: run-master run-worker1 run-worker2 run-worker3
+.PHONY: stop-master stop-worker1 stop-worker2 stop-worker3
+.PHONY: ssh-master ssh-worker1 ssh-worker2 ssh-worker3
+.PHONY: status
 
-# 2. RUN VM (HOST)
-# Ngejalanin master-vm
-run:
-	@echo "--- RUNNING MPI CLUSTER (QEMU WINDOWS WILL APPEAR) ---"
-	@echo "Setelah boot, SSH ke: ssh mpiuser@localhost -p 10022 (Pass: mpipass)"
-	$(RUNNER)
-	
+# Target default
+all: up
+
+up: run-master run-worker1 run-worker2 run-worker3
+	@echo "--- [SUCCESS] Semua VM telah dinyalakan. ---"
+	@echo "Gunakan 'make ssh-master' untuk masuk ke node master."
+
+down: stop-master stop-worker1 stop-worker2 stop-worker3
+	@echo "--- [SUCCESS] Semua VM telah dihentikan. ---"
+
+clean: down
+	@echo "--- Membersihkan artifak build dan file state... ---"
+	@rm -rf result .result*
+	@rm -f .pid-*
+	@rm -f *.qcow2 vm-*.log
+
+# -----------------------------------------------------------------
+# BUILD & STATUS
+# -----------------------------------------------------------------
+build: check-ssh-key
+	@echo "--- 1. BUILDING MPI CLUSTER VM IMAGES ---"
+	export SSH_PUBKEY_PATH=$(HOST_SSH_PUB_KEY_PATH) && \
+	nix build .#cluster-vms --impure
+
+status:
+	@echo "--- Status VM (berdasarkan file .pid) ---"
+	@for vm in $(VM_NAMES); do \
+		if [ -f .pid-$$vm ]; then \
+			if ps -p $$(cat .pid-$$vm) > /dev/null; then \
+				echo "VM '$$vm' BERJALAN dengan PID $$(cat .pid-$$vm)."; \
+			else \
+				echo "VM '$$vm' TIDAK BERJALAN (proses tidak ditemukan, hapus file .pid-$$vm)."; \
+			fi; \
+		else \
+			echo "VM '$$vm' TIDAK BERJALAN (file .pid tidak ditemukan)."; \
+		fi; \
+	done
+
+# -----------------------------------------------------------------
+# RUN
+# -----------------------------------------------------------------
+run-master: build
+	@if [ -f .pid-master ] && ps -p $$(cat .pid-master) > /dev/null; then \
+		echo "--- [INFO] VM 'master' sudah berjalan. ---"; \
+	else \
+		echo "--- Menjalankan VM 'master' di background... ---"; \
+		nohup ./result/bin/run-master-vm > vm-master.log 2>&1 & \
+		echo $$! > .pid-master; sleep 1; \
+		echo "--- [SUCCESS] VM 'master' berjalan dengan PID $$(cat .pid-master). ---"; \
+	fi
+
+run-worker1: build
+	@if [ -f .pid-worker1 ] && ps -p $$(cat .pid-worker1) > /dev/null; then \
+		echo "--- [INFO] VM 'worker1' sudah berjalan. ---"; \
+	else \
+		echo "--- Menjalankan VM 'worker1' di background... ---"; \
+		nohup ./result/bin/run-worker1-vm > vm-worker1.log 2>&1 & \
+		echo $$! > .pid-worker1; sleep 1; \
+		echo "--- [SUCCESS] VM 'worker1' berjalan dengan PID $$(cat .pid-worker1). ---"; \
+	fi
+
+run-worker2: build
+	@if [ -f .pid-worker2 ] && ps -p $$(cat .pid-worker2) > /dev/null; then \
+		echo "--- [INFO] VM 'worker2' sudah berjalan. ---"; \
+	else \
+		echo "--- Menjalankan VM 'worker2' di background... ---"; \
+		nohup ./result/bin/run-worker2-vm > vm-worker2.log 2>&1 & \
+		echo $$! > .pid-worker2; sleep 1; \
+		echo "--- [SUCCESS] VM 'worker2' berjalan dengan PID $$(cat .pid-worker2). ---"; \
+	fi
+
+run-worker3: build
+	@if [ -f .pid-worker3 ] && ps -p $$(cat .pid-worker3) > /dev/null; then \
+		echo "--- [INFO] VM 'worker3' sudah berjalan. ---"; \
+	else \
+		echo "--- Menjalankan VM 'worker3' di background... ---"; \
+		nohup ./result/bin/run-worker3-vm > vm-worker3.log 2>&1 & \
+		echo $$! > .pid-worker3; sleep 1; \
+		echo "--- [SUCCESS] VM 'worker3' berjalan dengan PID $$(cat .pid-worker3). ---"; \
+	fi
+
+# -----------------------------------------------------------------
+# ATURAN STOP
+# -----------------------------------------------------------------
+stop-master:
+	@if [ -f .pid-master ]; then kill $$(cat .pid-master); rm -f .pid-master; echo "--- VM 'master' dihentikan. ---"; else echo "--- VM 'master' tidak berjalan. ---"; fi
+
+stop-worker1:
+	@if [ -f .pid-worker1 ]; then kill $$(cat .pid-worker1); rm -f .pid-worker1; echo "--- VM 'worker1' dihentikan. ---"; else echo "--- VM 'worker1' tidak berjalan. ---"; fi
+
+stop-worker2:
+	@if [ -f .pid-worker2 ]; then kill $$(cat .pid-worker2); rm -f .pid-worker2; echo "--- VM 'worker2' dihentikan. ---"; else echo "--- VM 'worker2' tidak berjalan. ---"; fi
+
+stop-worker3:
+	@if [ -f .pid-worker3 ]; then kill $$(cat .pid-worker3); rm -f .pid-worker3; echo "--- VM 'worker3' dihentikan. ---"; else echo "--- VM 'worker3' tidak berjalan. ---"; fi
+
+# -----------------------------------------------------------------
+# SSH
+# -----------------------------------------------------------------
+ssh-master:
+	@echo "--- Menghubungkan SSH ke master (mpiuser@localhost:10023) ---"
+	@ssh -o StrictHostKeyChecking=no -p 10023 mpiuser@localhost
+
+ssh-worker1:
+	@echo "--- Menghubungkan SSH ke worker1 (mpiuser@localhost:10024) ---"
+	@ssh -o StrictHostKeyChecking=no -p 10024 mpiuser@localhost
+
+ssh-worker2:
+	@echo "--- Menghubungkan SSH ke worker2 (mpiuser@localhost:10025) ---"
+	@ssh -o StrictHostKeyChecking=no -p 10025 mpiuser@localhost
+
+ssh-worker3:
+	@echo "--- Menghubungkan SSH ke worker3 (mpiuser@localhost:10026) ---"
+	@ssh -o StrictHostKeyChecking=no -p 10026 mpiuser@localhost
+
+# -----------------------------------------------------------------
+# UTIL
+# -----------------------------------------------------------------
+check-ssh-key:
+	@if [ ! -f "$(HOST_SSH_PUB_KEY_PATH)" ]; then \
+		echo "Error: Public key SSH tidak ditemukan di $(HOST_SSH_PUB_KEY_PATH)"; \
+		exit 1; \
+	fi
