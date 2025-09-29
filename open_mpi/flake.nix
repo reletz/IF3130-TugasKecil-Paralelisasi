@@ -60,8 +60,8 @@
                 graphics = false;
                 
                 qemu.networkingOptions = [
-                  "-net nic,netdev=user.0,model=virtio"
-                  "-netdev user,id=user.0,hostfwd=tcp::${toString (10022 + (if name == "master" then 0 else if name == "worker1" then 1 else if name == "worker2" then 2 else 3))}-:22"
+                  "-net nic,netdev=user.1,model=virtio"
+                  "-netdev user,id=user.1,hostfwd=tcp::${toString (10022 + (if name == "master" then 1 else if name == "worker1" then 2 else if name == "worker2" then 3 else 4))}-:22"
                 ];
               };
             };
@@ -108,7 +108,15 @@
         worker2-vm = self.nixosConfigurations.worker2.config.system.build.vm;
         worker3-vm = self.nixosConfigurations.worker3.config.system.build.vm;
 
-        default = self.packages.${system}.master-vm;
+        cluster-vms = pkgs.symlinkJoin {
+          name = "mpi-cluster";
+          paths = [
+            self.nixosConfigurations.master.config.system.build.vm
+            self.nixosConfigurations.worker1.config.system.build.vm
+            self.nixosConfigurations.worker2.config.system.build.vm
+            self.nixosConfigurations.worker3.config.system.build.vm
+          ];
+        };
       };
     };
 }
