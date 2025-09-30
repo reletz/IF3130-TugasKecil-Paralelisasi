@@ -50,8 +50,19 @@ Jangan lupa masukin ke Path
 - Udah sih good to go harusnya tinggal jalanin make-make nya.
 
 TODO:
-1. Komunikasi antar VM (tolong setting SSH dari master ke worker)
-2. Algoritma OpenMPI
+1. Algoritma OpenMPI
+2. Bikin exec nya ke sebar (sekarang cuma kecompile di master)
+
+
+Kalau mau compile manual:
+```bash
+mpic++ open_mpi.cpp -o mpi -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs
+```
+
+Setup steps:
+1. Jalanin `make up` biar VM-nya nyala. Nanti vm-nya jalan di background. Kalau mau cek, bisa `make status`
+2. Biar source codenya ada di VM, jalanin `make remote-build`
+3. Jalanin exec nya bisa masuk ke ssh aja.
 
 ## 1. Introduction
 Provide a short description of the purpose of this assignment, the Sobel edge detection algorithm in the given code, and the goal of applying OpenMPI parallelization.
