@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <opencv2/opencv.hpp>
+#include <mpi.h>
 
 // image struct
 struct Image {
@@ -79,6 +80,8 @@ int main(int argc,char*argv[]){
         return 1;
     }
 
+    int rank, size, imageWidth;
+
     int n = std::stoi(argv[1]);
     std::string inputFile  = argv[2];
     std::string outputFile = argv[3];
@@ -105,32 +108,112 @@ int main(int argc,char*argv[]){
         }
     }
 
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    Image img, finalImg;
     auto t0 = std::chrono::high_resolution_clock::now();
-    Image img=loadJPG(inputFile);
-    auto t1 = std::chrono::high_resolution_clock::now();
-    Image res=sobel(img,mode,thresholds);
+    long long tInput = 0;
+
+    if (rank == 0) {
+        img=loadJPG(inputFile);
+        auto t1 = std::chrono::high_resolution_clock::now();
+        tInput = std::chrono::duration_cast<std::chrono::milliseconds>(t1-t0).count();
+    }
+
+    imageWidth = rank == 0 ? img.w : 0;
+    MPI_Bcast(&imageWidth, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&mode, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    int threshold_count = rank == 0 ? thresholds.size() : 0;
+    MPI_Bcast(&threshold_count, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (threshold_count > 0) {
+        MPI_Bcast(thresholds.data(), threshold_count, MPI_INT, 0, MPI_COMM_WORLD);
+    }
+
     auto t2 = std::chrono::high_resolution_clock::now();
-    saveJPG(res,outputFile);
+    int total_rows = (rank == 0) ? img.h : 0;
+    MPI_Bcast(&total_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    int rows_per_slave = total_rows / size;
+    int remainder_rows = total_rows % size;
+    if (rank == 0) {
+        finalImg = Image{ imageWidth, total_rows, std::vector<unsigned char>(imageWidth * total_rows) };
+    }
+    int my_start_row = rank * rows_per_slave + std::min(rank, remainder_rows);
+    int my_num_rows = rows_per_slave + (rank < remainder_rows ? 1 : 0);
+    int recv_start_row = my_start_row == 0 ? 0 : my_start_row - 1;
+    int recv_end_row = (my_start_row + my_num_rows == total_rows) ? total_rows : my_start_row + my_num_rows + 1;
+    int recv_num_rows = recv_end_row - recv_start_row;
+    int pixels_to_send = recv_num_rows * imageWidth;
+    std::vector<unsigned char> local_slices(pixels_to_send);
+    if (rank != 0) {
+        //slave do work here
+        MPI_Recv(local_slices.data(), pixels_to_send, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    } else { // master
+        int row_start = 0;
+        for (int slave = 0; slave < size; ++slave) {
+            int rows_for_slave = rows_per_slave + (slave < remainder_rows ? 1 : 0);
+            int send_start = row_start == 0 ? 0 : row_start - 1;
+            int send_end = (row_start + rows_for_slave == total_rows) ? total_rows : row_start + rows_for_slave + 1;
+            int send_cnt = (send_end - send_start) * imageWidth;
+
+            if (slave == 0) {
+                std::copy(&img.p[send_start * imageWidth], &img.p[send_start * imageWidth] + send_cnt, local_slices.begin());
+            } else {
+                MPI_Send(&img.p[send_start * imageWidth], send_cnt, MPI_UNSIGNED_CHAR, slave, 0, MPI_COMM_WORLD);
+            }
+            row_start += rows_for_slave;
+        }
+    }
+
+    Image local_chunk{imageWidth, recv_num_rows, local_slices};
+    Image processed_chunk = sobel(local_chunk, mode, thresholds);
+
+    int res_pixel_offset = my_start_row == 0 ? 0 : imageWidth;
+    int res_pixel_count = my_num_rows * imageWidth;
+
+    if (rank != 0) {
+        MPI_Send(processed_chunk.p.data() + res_pixel_offset, res_pixel_count, MPI_UNSIGNED_CHAR, 0, 1, MPI_COMM_WORLD);
+    } else {
+        int row_start = 0;
+        for (int slave = 0; slave < size; ++slave) {
+            int rows_for_slave = rows_per_slave + (slave < remainder_rows ? 1 : 0);
+            int pixels_to_recv= rows_for_slave * imageWidth;
+
+            if (slave == 0) {
+                std::copy(processed_chunk.p.begin() + res_pixel_offset, processed_chunk.p.begin() + res_pixel_offset + pixels_to_recv, finalImg.p.begin() + row_start * imageWidth);
+            } else {
+                MPI_Recv(&finalImg.p[row_start * imageWidth], pixels_to_recv, MPI_UNSIGNED_CHAR, slave, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+            row_start += rows_for_slave;
+        }
+    }
     auto t3 = std::chrono::high_resolution_clock::now();
 
-    auto tInput  = std::chrono::duration_cast<std::chrono::milliseconds>(t1-t0).count();
-    auto tProc   = std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
-    auto tOutput = std::chrono::duration_cast<std::chrono::milliseconds>(t3-t2).count();
+    if (rank == 0) {
+        auto t4 = std::chrono::high_resolution_clock::now();
+        saveJPG(finalImg, outputFile);
+        auto t5 = std::chrono::high_resolution_clock::now();
+        auto tProc   = std::chrono::duration_cast<std::chrono::milliseconds>(t3-t2).count();
+        auto tOutput = std::chrono::duration_cast<std::chrono::milliseconds>(t5-t4).count();
 
-    std::cout << "================ Sobel Edge Detection ================\n";
-    std::cout << "Program Type : Serial\n";
-    std::cout << "------------------------------------------------------\n";
-    std::cout << "Mode         : " << mode << "\n";
-    if (!thresholds.empty()) {
-        std::cout << "Threshold(s) : ";
-        for (auto t : thresholds) std::cout << t << " ";
-        std::cout << "\n";
+        std::cout << "================ Sobel Edge Detection ================\n";
+        std::cout << "Program Type : Paralel\n";
+        std::cout << "------------------------------------------------------\n";
+        std::cout << "Mode         : " << mode << "\n";
+        if (!thresholds.empty()) {
+            std::cout << "Threshold(s) : ";
+            for (auto t : thresholds) std::cout << t << " ";
+            std::cout << "\n";
+        }
+        std::cout << "------------------------------------------------------\n";
+        std::cout << "Timing (ms)\n";
+        std::cout << "  Input      : " << tInput  << "\n";
+        std::cout << "  Processing : " << tProc   << "\n";
+        std::cout << "  Output     : " << tOutput << "\n";
+        std::cout << "======================================================\n";
     }
-    std::cout << "------------------------------------------------------\n";
-    std::cout << "Timing (ms)\n";
-    std::cout << "  Input      : " << tInput  << "\n";
-    std::cout << "  Processing : " << tProc   << "\n";
-    std::cout << "  Output     : " << tOutput << "\n";
-    std::cout << "======================================================\n";
 
+    MPI_Finalize();
+    return 0;
 }
