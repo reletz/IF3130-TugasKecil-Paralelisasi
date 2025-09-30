@@ -11,12 +11,15 @@
 # Variabel
 VM_NAMES := master worker1 worker2 worker3
 HOST_SSH_PUB_KEY_PATH := ${HOME}/.ssh/id_ed25519.pub
+WORKER_PORTS := 10024 10025 10026
+DIST_DIR := ./dist
 
 SSH_MASTER_CMD := ssh -o StrictHostKeyChecking=no -p 10023 mpiuser@localhost
 PROJECT_DIR_REMOTE := ~/src
 SERIAL_DIR_REMOTE := ~/serial
 TC_DIR_REMOTE := ~/test_cases
 RSYNC_CMD := rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p 10023"
+RDIST_CMD := rsync -avz -e "ssh -o StrictHostKeyChecking=no -p $$port"
 
 .PHONY: all up down clean build check-ssh-key
 .PHONY: run-master run-worker1 run-worker2 run-worker3
@@ -144,6 +147,15 @@ sync:
 	@${RSYNC_CMD} ./src/ mpiuser@localhost:${PROJECT_DIR_REMOTE}/
 	@${RSYNC_CMD} ../test_cases/ mpiuser@localhost:${TC_DIR_REMOTE}/
 	@${RSYNC_CMD} ../serial/ mpiuser@localhost:${SERIAL_DIR_REMOTE}/
+	
+distribute:
+	@echo "--- Menyinkronkan direktori 'src' ke VM worker... ---"
+	${RSYNC_CMD} mpiuser@localhost:${PROJECT_DIR_REMOTE}/mpi ${DIST_DIR}/
+	@for port in $(WORKER_PORTS); do \
+		${RDIST_CMD} ${DIST_DIR}/ mpiuser@localhost:${PROJECT_DIR_REMOTE}/; \
+		${RDIST_CMD} ../test_cases/ mpiuser@localhost:${TC_DIR_REMOTE}/; \
+	done
+	@echo "--- [SUCCESS] Sinkronisasi selesai. ---"
 
 remote-build: sync
 	@echo "--- Menjalankan kompilasi di dalam VM master... ---"
