@@ -49,6 +49,10 @@ Jangan lupa masukin ke Path
 - Terus install qemu sama rsync yah
 - Udah sih good to go harusnya tinggal jalanin make-make nya.
 
+TODO:
+1. Komunikasi antar VM (tolong setting SSH dari master ke worker)
+2. Algoritma OpenMPI
+
 ## 1. Introduction
 Provide a short description of the purpose of this assignment, the Sobel edge detection algorithm in the given code, and the goal of applying OpenMPI parallelization.
 

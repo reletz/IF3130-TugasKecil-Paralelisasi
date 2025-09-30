@@ -93,10 +93,10 @@
               system.activationScripts.setupMpiEnvironment = {
                 deps = [ "users" ];
                 text = ''
-                  echo "10.2.0.15
-                  10.2.0.16
-                  10.2.0.17
-                  10.2.0.18" > $MPI_USER_HOME/home/mpiuser/hostfile
+                  echo "10.0.2.15
+                  10.0.2.16
+                  10.0.2.17
+                  10.0.2.18" > $MPI_USER_HOME/home/mpiuser/hostfile
                   chown mpiuser:users $MPI_USER_HOME/home/mpiuser/hostfile
                 '';
               };
