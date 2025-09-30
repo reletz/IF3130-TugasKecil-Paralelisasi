@@ -143,8 +143,12 @@ sync:
 
 remote-build: sync
 	@echo "--- Menjalankan kompilasi di dalam VM master... ---"
-	@${SSH_MASTER_CMD} "mpic++ ${PROJECT_DIR_REMOTE}/mpi.cpp -o mpi $$(pkg-config --cflags --libs opencv4)"
+	@${SSH_MASTER_CMD} "cd ${PROJECT_DIR_REMOTE} && mpic++ open_mpi.cpp -o mpi -I\$$OPENCV_INCLUDE/opencv4 -L\$$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs"
 	@echo "--- [SUCCESS] Kompilasi selesai. ---"
+
+test-opencv:
+	@echo "--- Testing OpenCV detection di VM master... ---"
+	@${SSH_MASTER_CMD} "echo 'PKG_CONFIG_PATH:' \$$PKG_CONFIG_PATH && echo 'OPENCV_INCLUDE:' \$$OPENCV_INCLUDE && echo 'OPENCV_LIB:' \$$OPENCV_LIB && pkg-config --modversion opencv4 || echo 'pkg-config failed, but we have manual paths'"
 
 # -----------------------------------------------------------------
 # UTIL

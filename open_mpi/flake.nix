@@ -35,15 +35,22 @@
         
         # OpenMPI
         environment.systemPackages = with pkgs; [
-          openmpi
           gcc
+          openmpi
+          openmpi.dev
 
-          opencv4
+          opencv
           pkg-config
 
           vim
           htop
         ];
+
+        environment.variables = {
+          PKG_CONFIG_PATH = "${pkgs.opencv}/lib/pkgconfig";
+          OPENCV_INCLUDE = "${pkgs.opencv}/include";
+          OPENCV_LIB = "${pkgs.opencv}/lib";
+        };
         
         system.stateVersion = "24.05";
       };

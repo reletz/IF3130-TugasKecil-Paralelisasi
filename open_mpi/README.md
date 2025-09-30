@@ -46,6 +46,7 @@ sudo apt-get install nix
 
 Jangan lupa masukin ke Path
 
+- Terus install qemu sama rsync yah
 - Udah sih good to go harusnya tinggal jalanin make-make nya.
 
 ## 1. Introduction
