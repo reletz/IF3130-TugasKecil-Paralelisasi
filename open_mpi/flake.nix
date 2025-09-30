@@ -45,7 +45,7 @@
       };
       
       # Generate VM config
-      makeVM = { name, ip, memory ? 1024, cores ? 2 }: nixpkgs.lib.nixosSystem {
+      makeVM = { name, ip, memory ? 1024, cores ? 2, extraModules ? [] }: nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
           commonConfig
@@ -66,7 +66,7 @@
               };
             };
           }
-        ];
+        ] ++extraModules;
       };
       
     in {
@@ -77,6 +77,20 @@
           ip = "10.0.2.15";
           memory = 2048;
           cores = 4;
+          extraModules = [
+            ({ pkgs, ... }: {
+              system.activationScripts.setupMpiEnvironment = {
+                deps = [ "users" ];
+                text = ''
+                  echo "10.2.0.15
+                  10.2.0.16
+                  10.2.0.17
+                  10.2.0.18" > $MPI_USER_HOME/hostfile
+                  chown mpiuser:users $MPI_USER_HOME/hostfile
+                '';
+              };
+            })
+          ];
         };
         
         worker1 = makeVM {
