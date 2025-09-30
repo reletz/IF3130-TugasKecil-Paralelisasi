@@ -1,2 +1,4 @@
 open_mpi/result
 open_mpi/*.qcow2
+open_mpi/*.log
+open_mpi/.pid-*
