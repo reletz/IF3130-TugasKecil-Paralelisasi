@@ -9,8 +9,12 @@
 # make status     		- Nampilin status tiap VM (Jalan + PID atau ga jalan samsek)
 
 # Variabel
-VM_NAMES := master worker1 worker2 worker3 # Tetap di sini untuk referensi
+VM_NAMES := master worker1 worker2 worker3
 HOST_SSH_PUB_KEY_PATH := ${HOME}/.ssh/id_ed25519.pub
+
+SSH_MASTER_CMD := ssh -o StrictHostKeyChecking=no -p 10023 mpiuser@localhost
+PROJECT_DIR_REMOTE := ~/src
+RSYNC_CMD := rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p 10023"
 
 .PHONY: all up down clean build check-ssh-key
 .PHONY: run-master run-worker1 run-worker2 run-worker3
@@ -119,7 +123,7 @@ stop-worker3:
 # -----------------------------------------------------------------
 ssh-master:
 	@echo "--- Menghubungkan SSH ke master (mpiuser@localhost:10023) ---"
-	@ssh -o StrictHostKeyChecking=no -p 10023 mpiuser@localhost
+	@${SSH_MASTER_CMD}
 
 ssh-worker1:
 	@echo "--- Menghubungkan SSH ke worker1 (mpiuser@localhost:10024) ---"
@@ -132,6 +136,15 @@ ssh-worker2:
 ssh-worker3:
 	@echo "--- Menghubungkan SSH ke worker3 (mpiuser@localhost:10026) ---"
 	@ssh -o StrictHostKeyChecking=no -p 10026 mpiuser@localhost
+
+sync:
+	@echo "--- Menyinkronkan direktori 'src' ke VM master... ---"
+	@${RSYNC_CMD} ./src/ mpiuser@localhost:${PROJECT_DIR_REMOTE}/
+
+remote-build: sync
+	@echo "--- Menjalankan kompilasi di dalam VM master... ---"
+	@${SSH_MASTER_CMD} "mpic++ ${PROJECT_DIR_REMOTE}/mpi.cpp -o mpi $$(pkg-config --cflags --libs opencv4)"
+	@echo "--- [SUCCESS] Kompilasi selesai. ---"
 
 # -----------------------------------------------------------------
 # UTIL

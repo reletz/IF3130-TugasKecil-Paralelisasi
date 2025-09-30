@@ -37,6 +37,10 @@
         environment.systemPackages = with pkgs; [
           openmpi
           gcc
+
+          opencv4
+          pkg-config
+
           vim
           htop
         ];
@@ -85,8 +89,8 @@
                   echo "10.2.0.15
                   10.2.0.16
                   10.2.0.17
-                  10.2.0.18" > $MPI_USER_HOME/hostfile
-                  chown mpiuser:users $MPI_USER_HOME/hostfile
+                  10.2.0.18" > $MPI_USER_HOME/home/mpiuser/hostfile
+                  chown mpiuser:users $MPI_USER_HOME/home/mpiuser/hostfile
                 '';
               };
             })
