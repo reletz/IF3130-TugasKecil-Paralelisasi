@@ -14,6 +14,8 @@ HOST_SSH_PUB_KEY_PATH := ${HOME}/.ssh/id_ed25519.pub
 
 SSH_MASTER_CMD := ssh -o StrictHostKeyChecking=no -p 10023 mpiuser@localhost
 PROJECT_DIR_REMOTE := ~/src
+SERIAL_DIR_REMOTE := ~/serial
+TC_DIR_REMOTE := ~/test_cases
 RSYNC_CMD := rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p 10023"
 
 .PHONY: all up down clean build check-ssh-key
@@ -138,12 +140,15 @@ ssh-worker3:
 	@ssh -o StrictHostKeyChecking=no -p 10026 mpiuser@localhost
 
 sync:
-	@echo "--- Menyinkronkan direktori 'src' ke VM master... ---"
+	@echo "--- Menyinkronkan direktori 'src' dan 'test_cases' ke VM master... ---"
 	@${RSYNC_CMD} ./src/ mpiuser@localhost:${PROJECT_DIR_REMOTE}/
+	@${RSYNC_CMD} ../test_cases/ mpiuser@localhost:${TC_DIR_REMOTE}/
+	@${RSYNC_CMD} ../serial/ mpiuser@localhost:${SERIAL_DIR_REMOTE}/
 
 remote-build: sync
 	@echo "--- Menjalankan kompilasi di dalam VM master... ---"
 	@${SSH_MASTER_CMD} "cd ${PROJECT_DIR_REMOTE} && mpic++ open_mpi.cpp -o mpi -I\$$OPENCV_INCLUDE/opencv4 -L\$$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs"
+	@${SSH_MASTER_CMD} "cd ${PROJECT_DIR_REMOTE} && g++ -o serial ~/serial/serial.cpp -I\$$OPENCV_INCLUDE/opencv4 -L\$$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs"
 	@echo "--- [SUCCESS] Kompilasi selesai. ---"
 
 test-opencv:
