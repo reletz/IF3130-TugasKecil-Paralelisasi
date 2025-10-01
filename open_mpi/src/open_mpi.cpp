@@ -198,7 +198,7 @@ int main(int argc,char*argv[]){
         auto tOutput = std::chrono::duration_cast<std::chrono::milliseconds>(t5-t4).count();
 
         std::cout << "================ Sobel Edge Detection ================\n";
-        std::cout << "Program Type : Paralel\n";
+        std::cout << "Program Type : Paralel (Open MPI)\n";
         std::cout << "------------------------------------------------------\n";
         std::cout << "Mode         : " << mode << "\n";
         if (!thresholds.empty()) {

@@ -63,13 +63,13 @@ mpic++ open_mpi.cpp -o mpi -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core
 
 Kalau mau eksekusi serial (di master):
 
-```cpp
+```bash
 ./src/serial 2 test_cases/<gambar> test_cases/<output gambar>  > output.txt
 ```
 
 Kalau mau eksekusi paralel (di master):
 
-```cpp
+```bash
 mpirun --hostfile hostfile -np 4 --mca btl_tcp_if_include eth1 ./src/mpi 2 test_cases/<gambar> test_cases/<output gambar> > output.txt
 ```
 
