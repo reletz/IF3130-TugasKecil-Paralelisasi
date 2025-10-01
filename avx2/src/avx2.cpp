@@ -163,17 +163,19 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
                 g_vec = _mm256_blendv_epi8(val_255, zeros, mask);
             }
             else if constexpr (mode == 2){
-                g_vec = level_vecs[0];
+                __m256i result = level_vecs[0];
                 for (size_t i = 0; i < thresholds.size(); ++i) {
                     __m256i threshold_vec = _mm256_set1_epi32(thresholds[i]);
                     __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
-                    g_vec = _mm256_blendv_epi8(g_vec, level_vecs[i+1], mask);
+                    result = _mm256_blendv_epi8(g_vec, level_vecs[i+1], mask);
                 }
+                g_vec = result;
             }
 
             __m256i zeros_256 = _mm256_setzero_si256();
             __m256i res_16bit_lanes = _mm256_packus_epi32(g_vec, zeros_256);
-            __m128i res_16bit = _mm256_castsi256_si128(res_16bit_lanes);
+            __m256i permuted = _mm256_permute4x64_epi64(res_16bit_lanes, 0xD8); // 11011000
+            __m128i res_16bit = _mm256_castsi256_si128(permuted);
 
             __m128i zeros_128 = _mm_setzero_si128();
             __m128i finalP = _mm_packus_epi16(res_16bit, zeros_128);
