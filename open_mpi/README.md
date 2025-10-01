@@ -45,18 +45,32 @@ sudo apt-get install nix
 ```
 
 Jangan lupa masukin ke Path
+```
+sudo systemctl enable --now nix-daemon.socket
+sudo systemctl enable --now nix-daemon.service
+```
 
 - Terus install qemu sama rsync yah
 - Udah sih good to go harusnya tinggal jalanin make-make nya.
 
 TODO:
-1. Algoritma OpenMPI
-2. Bikin exec nya ke sebar (sekarang cuma kecompile di master)
-
+1. Readme
 
 Kalau mau compile manual:
 ```bash
 mpic++ open_mpi.cpp -o mpi -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs
+```
+
+Kalau mau eksekusi serial (di master):
+
+```cpp
+./src/serial 2 test_cases/<gambar> test_cases/<output gambar>  > output.txt
+```
+
+Kalau mau eksekusi paralel (di master):
+
+```cpp
+mpirun --hostfile hostfile -np 4 --mca btl_tcp_if_include eth1 ./src/mpi 2 test_cases/<gambar> test_cases/<output gambar> > output.txt
 ```
 
 Setup steps:

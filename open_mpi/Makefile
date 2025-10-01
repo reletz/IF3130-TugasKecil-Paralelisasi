@@ -49,7 +49,7 @@ clean: down
 build: check-ssh-key
 	@echo "--- 1. BUILDING MPI CLUSTER VM IMAGES ---"
 	export SSH_PUBKEY_PATH=$(HOST_SSH_PUB_KEY_PATH) && \
-	nix build .#cluster-vms --impure
+	nix build .#cluster-vms --impure --extra-experimental-features nix-command --extra-experimental-features flakes
 
 status:
 	@echo "--- Status VM (berdasarkan file .pid) ---"
@@ -155,6 +155,7 @@ distribute:
 		${RDIST_CMD} ${DIST_DIR}/ mpiuser@localhost:${PROJECT_DIR_REMOTE}/; \
 		${RDIST_CMD} ../test_cases/ mpiuser@localhost:${TC_DIR_REMOTE}/; \
 	done
+	@rm -rf ${DIST_DIR}/
 	@echo "--- [SUCCESS] Sinkronisasi selesai. ---"
 
 remote-build: sync
