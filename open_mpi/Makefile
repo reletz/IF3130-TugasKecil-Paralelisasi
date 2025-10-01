@@ -21,14 +21,14 @@ TC_DIR_REMOTE := ~/test_cases
 RSYNC_CMD := rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p 10023"
 RDIST_CMD := rsync -avz -e "ssh -o StrictHostKeyChecking=no -p $$port"
 
-.PHONY: all up down clean build check-ssh-key
+.PHONY: all up down clean build check-ssh-key distribute pull
 .PHONY: run-master run-worker1 run-worker2 run-worker3
 .PHONY: stop-master stop-worker1 stop-worker2 stop-worker3
 .PHONY: ssh-master ssh-worker1 ssh-worker2 ssh-worker3
 .PHONY: status
 
 # Target default
-all: up
+all: up remote-build distribute
 
 up: run-master run-worker1 run-worker2 run-worker3
 	@echo "--- [SUCCESS] Semua VM telah dinyalakan. ---"
