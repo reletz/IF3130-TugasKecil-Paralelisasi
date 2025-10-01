@@ -172,22 +172,29 @@ int main(int argc,char*argv[]){
     int res_pixel_offset = my_start_row == 0 ? 0 : imageWidth;
     int res_pixel_count = my_num_rows * imageWidth;
 
-    if (rank != 0) {
-        MPI_Send(processed_chunk.p.data() + res_pixel_offset, res_pixel_count, MPI_UNSIGNED_CHAR, 0, 1, MPI_COMM_WORLD);
-    } else {
+    std::vector<int> recvcount(size);
+    std::vector<int> displacement(size);
+
+    if (rank == 0) {
         int row_start = 0;
         for (int slave = 0; slave < size; ++slave) {
             int rows_for_slave = rows_per_slave + (slave < remainder_rows ? 1 : 0);
-            int pixels_to_recv= rows_for_slave * imageWidth;
-
-            if (slave == 0) {
-                std::copy(processed_chunk.p.begin() + res_pixel_offset, processed_chunk.p.begin() + res_pixel_offset + pixels_to_recv, finalImg.p.begin() + row_start * imageWidth);
-            } else {
-                MPI_Recv(&finalImg.p[row_start * imageWidth], pixels_to_recv, MPI_UNSIGNED_CHAR, slave, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            }
+            recvcount[slave] = rows_for_slave * imageWidth;
+            displacement[slave] = row_start * imageWidth;
             row_start += rows_for_slave;
         }
     }
+
+    MPI_Gatherv(processed_chunk.p.data() + res_pixel_offset,
+                res_pixel_count,
+                MPI_UNSIGNED_CHAR,
+                finalImg.p.data(),
+                recvcount.data(),
+                displacement.data(),
+                MPI_UNSIGNED_CHAR,
+                0,
+                MPI_COMM_WORLD);
+
     auto t3 = std::chrono::high_resolution_clock::now();
 
     if (rank == 0) {
