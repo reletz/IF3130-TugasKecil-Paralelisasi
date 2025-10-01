@@ -158,6 +158,12 @@ distribute:
 	@rm -rf ${DIST_DIR}/
 	@echo "--- [SUCCESS] Sinkronisasi selesai. ---"
 
+pull:
+	@echo "--- Menarik hasil dari VM master ke host... ---"
+	@mkdir -p ./results/
+	@${RSYNC_CMD} mpiuser@localhost:~/result/ ./results/
+	@echo "--- [SUCCESS] Hasil telah ditarik ke direktori './results/'. ---"
+
 remote-build: sync
 	@echo "--- Menjalankan kompilasi di dalam VM master... ---"
 	@${SSH_MASTER_CMD} "cd ${PROJECT_DIR_REMOTE} && mpic++ open_mpi.cpp -o mpi -I\$$OPENCV_INCLUDE/opencv4 -L\$$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs"
