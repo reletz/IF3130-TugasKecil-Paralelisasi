@@ -34,7 +34,23 @@
           password = "mpipass";
           openssh.authorizedKeys.keys = [ sshPublicKey clusterSshPublicKey ];
         };
+
+        # Aliases for running
+        environment.shellAliases = {
+          mpi = "$HOME/src/mpi"; 
+          mpirun4 = "mpirun -np 4 --hostfile $HOME/hostfile $HOME/src/mpi";
+        };
         
+        # Create result folder
+        system.activationScripts.createResultDir = {
+          deps = [ "users" ];
+          text = ''
+            mkdir -p /home/mpiuser/result
+            chown mpiuser:users /home/mpiuser/result
+            chmod 755 /home/mpiuser/result
+          '';
+        };
+
         # SSH
         services.openssh = {
           enable = true;
