@@ -137,7 +137,7 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
 1. Test Case 1: High-Frequency Detail (Binary Threshold)
     - Image: snake.jpg
     - n value: 1
-    - Rationale: This test evaluates how well the algorithm identifies fine, complex edges. The scales of the snake provide high-frequency details. Using n=1 (binary threshold) will create a stark, high-contrast output, making it easy to see if the main patterns of the scales are correctly detected. It's a good test for correctness.
+    - Rationale: This test evaluates how well the algorithm identifies fine, complex edges. The scales of the snake provide hi| view.jpg | 4           | 18                | 56                      | 15                 | 89               |gh-frequency details. Using n=1 (binary threshold) will create a stark, high-contrast output, making it easy to see if the main patterns of the scales are correctly detected. It's a good test for correctness.
 
 2. Test Case 2: Smooth Gradients and Broad Edges (Gradient Magnitude)
     - Image: lion.jpg
@@ -187,37 +187,61 @@ The parallel AVX2 version produces an output image that is visually and pixel-id
 #### Parallel Version
 | Image Name | Core Number | Input Time (ms) | Processing Time (ms) | Output Time (ms) | Total Time (ms) |
 |------------|-------------|-----------------|-----------------------|------------------|-----------------|
-| fish.jpg | 2           | 89                | 203                      | 51                 | 343             |
-| fish.jpg | 3           | 90                | 142                      | 54                 | 286             |
-| fish.jpg | 4           | 92                | 114                      | 53                 | 259             |
-| view.jpg | 2           | 20                | 106                      | 15                 | 141             |
-| view.jpg | 3           | 19                | 89                      | 17                 | 125              |
-| view.jpg | 4           | 18                | 56                      | 15                 | 89               |
+| snake.jpg | 2           | 13                | 14                      | 13                 | 37             |
+| lion.jpg | 3           | 11                | 16                      | 12                 | 39             |
+| view.jpg | 4           | 28                | 37                      | 29                 | 94             |
+| fish.jpg | 2           | 127                | 140                      | 99                 | 366             |
+| birds.jpg | 3           | 1                | 6                      | 1                 | 8              |
 
 
 
 ### 4.3 Speedup and Efficiency
 - **Speedup** = Serial Time / Parallel Time  
-- **Efficiency** = Speedup / Number of Processes  
+- **Efficiency**:
 
+Since we cannot change the number of processors used in AVX2, we must use a different method to calculate its efficiency. This is determined by the vector width, which is the number of data elements processed in a single instruction.
+1. For our main calculations (multiplication and addition), we convert the 8-bit pixels to 32-bit integers using `_mm256_cvtepu8_epi32`.
+2. The number of 32-bit integers that can fit into a 256-bit register is: 256 bits / 32 bits = 8.
+3. Our main loop iterates by jumping 8 pixels at a time (`x+=8`), which matches this hardware capability. Therefore, our effective vector width is 8.
+
+Thus, the formula for efficiency becomes:
+
+Vectorization Efficiency = Speedup / Vector Width
+
+|Image Name|Serial Processing Time (ms)|AVX2 Processing Time (ms)|Speedup|Vector Width|Vectorization Efficiency (%)|
+|---|---|---|---|---|---|
+|snake.jpg|52|14|3.71x|8|46.4%|
+|lion.jpg|48|16|3.00x|8|37.5%|
+|view.jpg|215|37|5.81x|8|72.6%|
+|fish.jpg|452|140|3.23x|8|40.4%|
+|birds.jpg|41|6|6.83x|8|85.4%|
 
 
 ## 5. Discussion
 - What worked well in your parallelization approach?
+> The SIMD vectorization strategy using AVX2 was highly effective. By processing 8 pixels in a single instruction cycle, we were able to significantly reduce the total number of operations required to process an image. The performance data clearly shows this, with the most significant speedup of 6.83x on the `birds.jpg` test case. The use of aligned memory (`_mm_malloc`) and compile-time optimizations (`if constexpr`) likely contributed to this success by reducing memory access penalties and eliminating runtime branching. The approach worked best on larger images like view.jpg and fish.jpg, where the computational workload was high enough to amortize the initial overhead of vectorization.
 
 - What challenges did you face?
+> The primary challenge was the steep learning curve and complexity of programming with AVX2 intrinsics. The code is significantly less readable and harder to debug compared to the straightforward serial version. A deep understanding of CPU registers, data alignment, and data type management was required. Specifically, the process of loading 8-bit pixels, converting them to 32-bit integers to prevent overflow during convolution, and then carefully packing the 32-bit results back into 8-bit values for storage was complex and error-prone.
 
 - Did you notice any overhead, and how did it affect performance?
+> Yes, overhead is present and is the main reason the speedup is not a theoretical 8x. The vectorization efficiency, ranging from 37.5% to 85.4%, quantifies this. The overhead comes from several sources:
+> - Data Marshalling: Time is spent loading data from memory into AVX registers and storing it back.
+> - Type Conversion: Instructions to convert data between 8-bit and 32-bit formats are necessary but do not perform the core computation.
+> - Serial Remainder: The serial loop that processes pixels at the end of each row (for widths not divisible by 8) adds to the execution time and reduces overall parallelism, a concept explained by Amdahl's Law.
+> The efficiency was lower on smaller or less complex images (`lion.jpg`, `snake.jpg`), where this overhead constituted a larger portion of the total processing time.
 
 
 
 ## 6. Conclusion
-Summarize your findings:  
 - Was parallelization effective?
+> Yes, parallelization using AVX2 was unequivocally effective. It leveraged instruction-level parallelism to achieve substantial performance gains on a single CPU core.
 
 - Did it improve performance significantly?
+> The performance improvement was significant across all test cases, with speedups ranging from a solid 3.00x to an impressive 6.83x. This confirms that for data-parallel tasks like image convolution, SIMD is an excellent optimization strategy.
 
 - Any tradeoffs between computation speed and communication overhead?
+> The primary tradeoff was not with communication overhead (as this is a single-process model) but with development complexity. The performance gains came at the cost of significantly more complex, less maintainable, and hardware-specific code. The developer time required to implement and debug the AVX2 version was far greater than for the serial version.
 
 
 
