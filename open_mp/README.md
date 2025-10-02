@@ -29,6 +29,16 @@
 9. [How to Run](#9-how-to-run)  
 
 
+Compile command:
+```bash
+g++ open_mp.cpp -o open_mp -fopenmp -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core -lopencv_imgproc -lo
+pencv_highgui -lopencv_imgcodecs
+```
+
+Run command:
+```bash
+./open_mp <thread_number> <n> input.jpg output.jpg > output.txt
+```
 
 ## 1. Introduction
 Provide a short description of the purpose of this assignment, the Sobel edge detection algorithm in the given code, and the goal of applying OpenMPI parallelization.
