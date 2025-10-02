@@ -1,32 +1,29 @@
 # Parallelization Report — Sobel Edge Detection with Open MPI
 
 ## Team Information
-
-- **Team ID: pacuanCUDA**
-- **Class: K-03**
+- **Team ID: pacuanCUDA**  
+- **Class: K-03**  
 
 ### Members
-
-| Name                     | Student ID |
-| ------------------------ | ---------- |
-| Frederiko Eldad Mugiyono | 13523147   |
-| Naufarrel Zhafif Abhista | 13523149   |
-| I Made Wiweka Putera     | 13523160   |
+| Name      | Student ID |
+|---|---|
+| Frederiko Eldad Mugiyono | 13523147 |
+| Naufarrel Zhafif Abhista | 13523149 |
+| I Made Wiweka Putera     | 13523160 |
 
 ## List of Contents
-
 0. [Prerequisites](#0-prerequisites)
-1. [Introduction](#1-introduction)
-2. [Theory: Parallelizable Operations](#2-theory-parallelizable-operations)
-3. [Code Changes and Implementation](#3-code-changes-and-implementation)
-4. [Results and Evaluation](#4-results-and-evaluation)
-   - [Correctness](#41-correctness)
-   - [Performance Comparison](#42-performance-comparison)
-   - [Speedup and Efficiency](#43-speedup-and-efficiency)
-5. [Discussion](#5-discussion)
-6. [Conclusion](#6-conclusion)
-7. [Additional Notes (Optional)](#7-additional-notes-optional)
-8. [References](#8-references)
+1. [Introduction](#1-introduction)  
+2. [Theory: Parallelizable Operations](#2-theory-parallelizable-operations)  
+3. [Code Changes and Implementation](#3-code-changes-and-implementation)  
+4. [Results and Evaluation](#4-results-and-evaluation)  
+   - [Correctness](#41-correctness)  
+   - [Performance Comparison](#42-performance-comparison)  
+   - [Speedup and Efficiency](#43-speedup-and-efficiency)  
+5. [Discussion](#5-discussion)  
+6. [Conclusion](#6-conclusion)  
+7. [Additional Notes (Optional)](#7-additional-notes-optional)  
+8. [References](#8-references)  
 9. [How to Run](#9-how-to-run)
 
 ## 0. Prerequisites
@@ -34,17 +31,13 @@
 We use NixOS for this project to ensure a reproducible virtual machine environment, avoiding the need to manually configure each VM.
 
 Setup steps:
-
 1. First, install the Nix Package Manager. On Arch Linux:
-
 ```bash
 sudo pacman -S nix
 ```
-
 Or on Debian/Ubuntu:
-
 ```bash
-sh <(curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install)
+sudo apt-get install nix
 ```
 
 Then, enable the Nix daemon:
@@ -55,13 +48,11 @@ sudo systemctl enable --now nix-daemon.service
 ```
 
 2. You will also need to install qemu and rsync. On Arch Linux:
-
 ```bash
 sudo pacman -S rsync build-essential qemu-system-x86 qemu-utils
 ```
 
 Or on Debian/Ubuntu:
-
 ```bash
 sudo apt-get install rsync build-essential qemu-system-x86 qemu-utils
 ```
@@ -69,30 +60,25 @@ sudo apt-get install rsync build-essential qemu-system-x86 qemu-utils
 After that, you should be good to go by using the Makefile targets.
 
 ## 1. Introduction
-
 This assignment aims to accelerate the Sobel edge detection algorithm using the Message Passing Interface (MPI). The provided serial code, serial.cpp, will be converted into a parallel version, open_mpi.cpp, capable of running on a cluster. The primary focus of this parallelization is to distribute the computational workload (applying the Sobel filter) across multiple processes to reduce the overall processing time.
 
 ## 2. Theory: Parallelizable Operations
-
 The Sobel algorithm essentially applies a 3x3 convolution kernel to every pixel of the image. The calculation of the gradient value for a single pixel depends only on itself and its 8 neighboring pixels. This makes the Sobel operation an ideal candidate for data parallelism because:
 
 - **Pixel Independence**: The computation for each pixel (away from the borders) is independent of the others.
 - **Domain Decomposition**: The image can be easily divided into several parts (e.g., horizontal strips or blocks), and each part can be processed simultaneously by a different process.
 
-**I/O operations** (reading and saving the image) are kept serial and handled by a single master process. Parallelizing I/O (using MPI-IO) would add significant complexity and is generally only effective for very large datasets.
+**I/O operations** (reading and saving the image) are kept serial and handled by a single master process. Parallelizing I/O (using MPI-IO) would add significant complexity and is generally only effective for very large datasets. 
+
 
 ## 3. Code Changes and Implementation
-
 ### 3.1 Parallelization Strategy
-
 The strategy employed is **one-dimensional domain decomposition**, where the image is divided into several horizontal strips, and each MPI process is responsible for processing one strip.
-
 - **Task Division**: The master process (rank 0) is responsible for reading the image, dividing it into sections, and distributing them to the worker processes (including itself).
 - **Boundary Handling**: Since the Sobel kernel is 3x3, processing a row of pixels requires the row above and the row below it. To handle this, each worker process is sent its data strip plus one "ghost row" from its top and bottom neighbors. This ensures that each process can work independently without needing further communication during the computation phase.
 - **Result Gathering**: Once each process is finished, the processed results (which no longer include the ghost rows) are sent back to the master process, which assembles them into the final image.
 
 The communication flow is as follows:
-
 1. **Broadcast Metadata**: The master broadcasts essential information like image dimensions and filter mode to all processes.
 2. **Manual Scatter with Overlap**: The master manually sends overlapping image chunks to each worker using MPI_Send.
 3. **Receive**: Each worker receives its image chunk using MPI_Recv.
@@ -107,10 +93,38 @@ The primary changes occur in the main function, where the simple, linear executi
 
 The serial version has a straightforward execution flow. It loads the image, applies the Sobel filter to the entire image, saves the result, and then reports the timing. Everything happens in a single process.
 
-##### Serial Main Function:
-
-```cpp
+``` cpp
 // From: serial.cpp
+
+Image sobel(const Image &in, int mode, const std::vector<int>& thresholds) {
+    // ...
+
+    for(int y=1;y<in.h-1;y++){
+        for(int x=1;x<in.w-1;x++){
+            //...
+
+            if(mode == 0) { 
+                out.at(x,y) = (g > 255) ? 255 : g;
+            }
+            else if(mode == 1) { 
+                out.at(x,y) = (g > thresholds[0]) ? 0 : 255;
+            }
+            else {
+                int bins = thresholds.size() + 1;
+                std::vector<int> levels(bins);
+                for(int i=0; i<bins; i++){
+                    levels[i] = (255 * i) / (bins - 1);
+                }
+
+                int idx = 0;
+                while(idx < thresholds.size() && g > thresholds[idx]) idx++;
+                out.at(x,y) = levels[idx];
+            }
+        }
+    }
+    return out;
+}
+
 int main(int argc,char*argv[]){
     // ... argument parsing ...
 
@@ -131,46 +145,61 @@ int main(int argc,char*argv[]){
 }
 ```
 
-##### Original Sobel Algorithm:
-
-```cpp
-// From: serial.cpp - Original Sobel implementation
-for(int y=1;y<in.h-1;y++){
-    for(int x=1;x<in.w-1;x++){
-        // ... gradient calculation ...
-        int g = std::sqrt(sx*sx + sy*sy);  // Always compute sqrt
-
-        if(mode == 0) {
-            out.at(x,y) = (g > 255) ? 255 : g;
-        }
-        else if(mode == 1) {
-            out.at(x,y) = (g > thresholds[0]) ? 0 : 255;
-        }
-        else {
-            // Levels computed inside nested loop (inefficient)
-            int bins = thresholds.size() + 1;
-            std::vector<int> levels(bins);
-            for(int i=0; i<bins; i++){
-                levels[i] = (255 * i) / (bins - 1);
-            }
-
-            int idx = 0;
-            while(idx < thresholds.size() && g > thresholds[idx]) idx++;
-            out.at(x,y) = levels[idx];
-        }
-    }
-}
-```
-
 #### After: open_mpi.cpp
 
 The parallel version introduces MPI initialization and finalization, and divides the main logic into sections that are executed by either the master (rank 0) or all processes.
 
-##### 1. MPI Initialization and Metadata Broadcast
+##### 0. Algorithm Modification
+Before getting into the parallelism itself, we found a way to optimize the sobel itself.
+```cpp
+// From: open_mpi.cpp
+Image sobel(const Image &in, int mode, const std::vector<int>& thresholds) {
+    //...
 
+    // Move the levels block of code so that it is not inside of the loop(s).
+    std::vector<int> levels;
+    int thresh_size = thresholds.size();
+    if (mode == 2){
+        int bins = thresholds.size() + 1;
+        levels.resize(bins);
+        for(int i=0; i<bins; i++){
+            levels[i] = (255 * i) / (bins - 1);
+        }
+    }
+
+    for(int y=1;y<in.h-1;y++){
+        for(int x=1;x<in.w-1;x++){
+            //...
+
+            // use g_squared instead of g
+            int g_squared = sx*sx + sy*sy;
+
+            if (mode == 0) { 
+                // square root it when we are in mode 0
+                int g = std::sqrt(g_squared);
+                out.at(x,y) = (g > 255) ? 255 : g;
+
+                // otherwise, use the g_squared
+            }
+            else if (mode == 1) { 
+                int threshold_squared = thresholds[0] * thresholds[0];
+                out.at(x,y) = (g_squared > threshold_squared) ? 0 : 255;
+            }
+            else {
+                int idx = 0;
+                while(idx < thresholds.size() && g_squared > thresholds[idx] * thresholds[idx]) idx++;
+                out.at(x,y) = levels[idx];
+            }
+        }
+    }
+    return out;
+}
+```
+
+##### 1. MPI Initialization and Metadata Broadcast
 The program starts by initializing the MPI environment. The master process (rank 0) loads the image and then broadcasts its dimensions and parameters to all other processes.
 
-```cpp
+``` cpp
 // From: open_mpi.cpp
 
 MPI_Init(&argc, &argv);
@@ -189,10 +218,9 @@ MPI_Bcast(&imageWidth, 1, MPI_INT, 0, MPI_COMM_WORLD);
 ```
 
 ##### 2. Data Distribution (Scatter)
-
 The master process calculates how to split the image into horizontal strips, including the necessary overlapping "ghost rows". It then sends the appropriate chunk to each worker process.
 
-```cpp
+``` cpp
 // From: open_mpi.cpp
 
 // Calculate rows per process
@@ -219,22 +247,20 @@ if (rank == 0) {
 ```
 
 ##### 3. Parallel Computation
-
 Every process, including the master, now independently applies the Sobel filter to its local chunk of the image.
 
-```cpp
+``` cpp
 // From: open_mpi.cpp
 
 // All processes (master and workers) work on their local data
 Image local_chunk{imageWidth, recv_num_rows, local_slices};
 Image processed_chunk = sobel(local_chunk, mode, thresholds);
-```
+``` 
 
 ##### 4. Result Aggregation (Gather)
-
 Finally, the processed chunks (without the ghost rows) are sent back from all processes to the master. The master assembles them in the correct order to form the complete final image.
 
-```cpp
+``` cpp
 // From: open_mpi.cpp
 
 // All processes participate in the gather operation
@@ -260,181 +286,124 @@ MPI_Finalize();
 return 0;
 ```
 
-##### 5. Algorithm Optimizations
-
-Two key optimizations were implemented to improve performance while maintaining identical output:
-
-**A. Pre-computing Threshold Levels:**
-In the serial version, threshold levels for multi-level thresholding (mode 2) were computed inside the nested loop, causing redundant calculations. In the parallel version, these levels are pre-computed once before entering the parallel region:
-
-```cpp
-// Moved outside the parallel region for efficiency
-std::vector<int> levels;
-if (mode == 2){
-    int bins = thresholds.size() + 1;
-    levels.resize(bins);
-    for(int i=0; i<bins; i++){
-        levels[i] = (255 * i) / (bins - 1);
-    }
-}
-```
-
-**B. Reduced sqrt Computation:**
-The serial version computed sqrt for every pixel regardless of mode. The optimized version only computes sqrt when the actual gradient magnitude is needed (mode 0), using squared comparisons for threshold modes:
-
-```cpp
-// Before: Always computed sqrt
-int g = std::sqrt(sx*sx + sy*sy);
-
-// After: Only compute sqrt when needed
-int g_squared = sx*sx + sy*sy;
-
-if (mode == 0) {
-    int g = std::sqrt(g_squared);  // Only for gradient mode
-    out.at(x,y) = (g > 255) ? 255 : g;
-}
-else if (mode == 1) {
-    int threshold_squared = thresholds[0] * thresholds[0];
-    out.at(x,y) = (g_squared > threshold_squared) ? 0 : 255;  // Compare squared values
-}
-else {
-    int idx = 0;
-    while(idx < thresholds.size() && g_squared > thresholds[idx] * thresholds[idx]) idx++;
-    out.at(x,y) = levels[idx];  // Use pre-computed levels
-}
-```
-
-These optimizations significantly reduce computational overhead: the level pre-computation eliminates redundant calculations in the inner loop, while sqrt elimination reduces expensive floating-point operations in threshold-based modes.
-
-**Key optimizations implemented:**
-
-- **Reduced sqrt computation**: Only compute sqrt for gradient mode (mode 0), use squared comparisons for threshold modes (modes 1 & 2)
-- **Pre-computed levels**: Move level calculation outside the nested pixel loop for multi-threshold mode
-- **Squared threshold comparisons**: Eliminate sqrt overhead in binary and multi-threshold modes while maintaining identical results
-
 ## 4. Results and Evaluation
 
 ### 4.0 Test Cases (Self-made)
 
 1. Test Case 1: High-Frequency Detail (Binary Threshold)
-
-   - Image: snake.jpg
-   - n value: 1
-   - Rationale: This test evaluates how well the algorithm identifies fine, complex edges. The scales of the snake provide high-frequency details. Using n=1 (binary threshold) will create a stark, high-contrast output, making it easy to see if the main patterns of the scales are correctly detected. It's a good test for correctness.
+    - Image: snake.jpg
+    - n value: 1
+    - Rationale: This test evaluates how well the algorithm identifies fine, complex edges. The scales of the snake provide high-frequency details. Using n=1 (binary threshold) will create a stark, high-contrast output, making it easy to see if the main patterns of the scales are correctly detected. It's a good test for correctness.
 
 2. Test Case 2: Smooth Gradients and Broad Edges (Gradient Magnitude)
-
-   - Image: lion.jpg
-   - n value: 0
-   - Rationale: The lion's mane and the out-of-focus background have smooth transitions and less defined edges. Using n=0 (gradient magnitude) is perfect for this scenario. It will show the intensity of the edges, allowing us to see how the filter responds to both the sharp edges of the lion's face and the softer edges of its fur.
+    - Image: lion.jpg
+    - n value: 0
+    - Rationale: The lion's mane and the out-of-focus background have smooth transitions and less defined edges. Using n=0 (gradient magnitude) is perfect for this scenario. It will show the intensity of the edges, allowing us to see how the filter responds to both the sharp edges of the lion's face and the softer edges of its fur.
 
 3. Test Case 3: Structural and Geometric Lines (Multi-level Threshold)
-
-   - Image: view.jpg
-   - n value: 4
-   - Rationale: This image is dominated by strong, straight lines from the fence and the clear horizon. Using a multi-level threshold (n=4) will test the algorithm's ability to quantize edge strengths into different levels. We expect the strong lines of the fence to be in the highest intensity buckets, while the softer edges of the hills and clouds will fall into lower-intensity gray levels.
+    - Image: view.jpg
+    - n value: 4
+    - Rationale: This image is dominated by strong, straight lines from the fence and the clear horizon. Using a multi-level threshold (n=4) will test the algorithm's ability to quantize edge strengths into different levels. We expect the strong lines of the fence to be in the highest intensity buckets, while the softer edges of the hills and clouds will fall into lower-intensity gray levels.
 
 4. Test Case 4: Repetitive Patterns and Clutter (Binary Threshold)
-
-   - Image: fish.jpg
-   - n value: 1
-   - Rationale: This image contains many similar, overlapping objects, creating a cluttered scene. A binary threshold (n=1) will test the filter's ability to separate individual objects. The goal is to see if the outlines of each fish can be distinguished, or if they blend into a single noisy mass. This is a good stress test for edge separation.
+    - Image: fish.jpg
+    - n value: 1
+    - Rationale: This image contains many similar, overlapping objects, creating a cluttered scene. A binary threshold (n=1) will test the filter's ability to separate individual objects. The goal is to see if the outlines of each fish can be distinguished, or if they blend into a single noisy mass. This is a good stress test for edge separation.
 
 5. Test Case 5: Vibrant Colors and Sharp Boundaries (High Multi-level Threshold)
-   - Image: birds.jpg
-   - n value: 128
-   - Rationale: The birds have very distinct, sharp boundaries between different colored feathers. The grayscale conversion will turn these color boundaries into sharp intensity changes. Using a high number of levels (n=128) will test the multi-level thresholding logic more thoroughly, creating a more nuanced "posterized" effect on the detected edges. It checks if the thresholding logic scales correctly with a higher number of bins.
+    - Image: birds.jpg
+    - n value: 128
+    - Rationale: The birds have very distinct, sharp boundaries between different colored feathers. The grayscale conversion will turn these color boundaries into sharp intensity changes. Using a high number of levels (n=128) will test the multi-level thresholding logic more thoroughly, creating a more nuanced "posterized" effect on the detected edges. It checks if the thresholding logic scales correctly with a higher number of bins.
 
 ### 4.1 Correctness
 
-| Input Image                       | Serial Output                                  | Parallel Output (4 Cores)                  |
-| --------------------------------- | ---------------------------------------------- | ------------------------------------------ |
-| ![input](../test_cases/snake.jpg) | ![serial](../serial/output/snake_binary.jpg)   | ![parallel](tc_results/snake_binary.jpg)   |
-| ![input](../test_cases/lion.jpg)  | ![serial](../serial/output/lion_gradient.jpg)  | ![parallel](tc_results/lion_gradient.jpg)  |
-| ![input](../test_cases/view.jpg)  | ![serial](../serial/output/view_multi.jpg)     | ![parallel](tc_results/view_multi.jpg)     |
-| ![input](../test_cases/fish.jpg)  | ![serial](../serial/output/fish_binary.jpg)    | ![parallel](tc_results/fish_binary.jpg)    |
+| Input Image | Serial Output | Parallel Output (4 Cores) |
+|-------------|---------------|-----------------|
+| ![input](../test_cases/snake.jpg) | ![serial](../serial/output/snake_binary.jpg) | ![parallel](tc_results/snake_binary.jpg) |
+| ![input](../test_cases/lion.jpg) | ![serial](../serial/output/lion_gradient.jpg) | ![parallel](tc_results/lion_gradient.jpg) |
+| ![input](../test_cases/view.jpg) | ![serial](../serial/output/view_multi.jpg) | ![parallel](tc_results/view_multi.jpg) |
+| ![input](../test_cases/fish.jpg) | ![serial](../serial/output/fish_binary.jpg) | ![parallel](tc_results/fish_binary.jpg) |
 | ![input](../test_cases/birds.jpg) | ![serial](../serial/output/birds_multi128.jpg) | ![parallel](tc_results/birds_multi128.jpg) |
 
 ### 4.2 Performance Comparison
 
 #### Serial Version
-
 | Image Name | Input Time (ms) | Processing Time (ms) | Output Time (ms) | Total Time (ms) |
-| ---------- | --------------- | -------------------- | ---------------- | --------------- |
-| fish.jpg   | 86              | 452                  | 80               | 618             |
-| view.jpg   | 19              | 215                  | 17               | 251             |
+|------------|-----------------|-----------------------|------------------|-----------------|
+| fish.jpg | 86                | 452                      | 80                 | 618                |
+| view.jpg | 19                | 215                      | 17                 | 251                |
 
 #### Parallel Version
-
 | Image Name | Core Number | Input Time (ms) | Processing Time (ms) | Output Time (ms) | Total Time (ms) |
-| ---------- | ----------- | --------------- | -------------------- | ---------------- | --------------- |
-| fish.jpg   | 2           | 89              | 203                  | 51               | 343             |
-| fish.jpg   | 3           | 90              | 142                  | 54               | 286             |
-| fish.jpg   | 4           | 92              | 114                  | 53               | 259             |
-| view.jpg   | 2           | 20              | 106                  | 15               | 141             |
-| view.jpg   | 3           | 19              | 89                   | 17               | 125             |
-| view.jpg   | 4           | 18              | 56                   | 15               | 89              |
+|------------|-------------|-----------------|-----------------------|------------------|-----------------|
+| fish.jpg | 2           | 90                | 179                      | 51                 | 320             |
+| fish.jpg | 3           | 91                | 119                      | 50                 | 260             |
+| fish.jpg | 4           | 90                | 90                      | 50                 | 230             |
+| view.jpg | 2           | 20                | 45                      | 14                 | 79             |
+| view.jpg | 3           | 16                | 32                      | 15                 | 63              |
+| view.jpg | 4           | 17                | 24                      | 15                 | 56               |
+
+
 
 ### 4.3 Speedup and Efficiency
-
-- **Speedup** = Serial Time / Parallel Time
-- **Efficiency** = Speedup / Number of Processes
+- **Speedup** = Serial Time / Parallel Time  
+- **Efficiency** = Speedup / Number of Processes  
 
 **fish.jpg (Serial Processing Time: 452 ms)**
 |Core Number| Parallel Processing Time (ms) | Speedup | Efficiency |
 |---|---|---|---|
-|2|203|2.23x|111.5%|
-|3|142|3.18x|106.0%|
-|4|114|3.96x|99.0%|
+|2|179|2.52x|126.2%|
+|3|119|3.79x|126.6%|
+|4|90|5.02x|125.5%|
 
 **view.jpg (Serial Processing Time: 215 ms)**
 |Core Number|Parallel Processing Time (ms)|Speedup|Efficiency|
 |---|---|---|---|
-|2|106|2.03x|101.5%|
-|3|89|2.42x|80.7%|
-|4|56|3.84x|96.0%|
+|2|45|4.77x|238.8%|
+|3|32|6.72x|224.0%|
+|4|24|8.96x|224.0%|
+
+
 
 ## 5. Discussion
-
 - What worked well in your parallelization approach?
-
-  > The domain decomposition approach (dividing the image into horizontal strips) worked exceptionally well. This strategy is straightforward to implement and effectively distributes the computational load. The use of MPI_Gatherv also proved to be the correct choice for handling cases where the number of rows is not perfectly divisible by the process count, ensuring results are reassembled correctly. As seen in the speedup table, increasing the number of processes results in a nearly linear decrease in processing time, which indicates a well-balanced workload.
+> The domain decomposition approach (dividing the image into horizontal strips) worked exceptionally well. This strategy is straightforward to implement and effectively distributes the computational load. The use of `MPI_Gatherv` also proved to be the correct choice for handling cases where the number of rows is not perfectly divisible by the process count, ensuring results are reassembled correctly. As seen in the speedup table, increasing the number of processes results in a nearly linear decrease in processing time, which indicates a well-balanced workload.
 
 - What challenges did you face?
-
-  > A significant challenge was the environment setup. Creating a reproducible cluster of VMs with NixOS, while powerful, has a steep learning curve. A key difficulty was configuring the network and SSH keys to ensure the master node could communicate with and launch processes on the worker nodes without passwords, which is a requirement for mpirun.
-  > On the algorithm side, the main challenge was correctly handling the ghost rows. Any miscalculation in the size and offset of the data chunks sent to each process could easily lead to incorrect outputs or segmentation faults. We initially considered MPI_Scatterv but switched to a manual MPI_Send loop, which provided more explicit control over the overlapping data, albeit at the cost of more complex code on the master node.
+> A significant challenge was the environment setup. Creating a reproducible cluster of VMs with NixOS, while powerful, has a steep learning curve. A key difficulty was configuring the network and SSH keys to ensure the master node could communicate with and launch processes on the worker nodes without passwords, which is a requirement for mpirun.
+On the algorithm side, the main challenge was correctly handling the ghost rows. Any miscalculation in the size and offset of the data chunks sent to each process could easily lead to incorrect outputs or segmentation faults. We initially considered `MPI_Scatterv` but switched to a manual `MPI_Send` loop, which provided more explicit control over the overlapping data, albeit at the cost of more complex code on the master node.
 
 - Did you notice any overhead, and how did it affect performance?
-  > Yes, communication overhead was observable. While the Processing Time dropped dramatically, the Input Time and Output Time in the parallel version were slightly higher. This is due to the time spent on initial communication (MPI_Bcast and MPI_Send) and final aggregation (MPI_Gatherv). This overhead is relatively small compared to the gains from parallelizing the computation, especially for the larger fish.jpg image. However, for smaller images or faster computations, this overhead could become a more significant limiting factor.
+> Yes, communication overhead was observable. While the Processing Time dropped dramatically, the Input Time and Output Time in the parallel version were slightly higher. This is due to the time spent on initial communication (`MPI_Bcast` and `MPI_Send`) and final aggregation (`MPI_Gatherv`). This overhead is relatively small compared to the gains from parallelizing the computation, especially for the larger `fish.jpg` image. However, for smaller images or faster computations, this overhead could become a more significant limiting factor. 
+
+
 
 ## 6. Conclusion
-
-Summarize your findings:
-
+Summarize your findings:  
 - Was parallelization effective?
-
-  > Yes, the parallelization was highly effective. For both test images, the parallel version consistently outperformed the serial version, even with just two processes.
+> Yes, the parallelization was highly effective. For both test images, the parallel version consistently outperformed the serial version, even with just two processes.
 
 - Did it improve performance significantly?
-
-  > The performance improvement was significant. With 4 processes, we achieved a speedup of up to 3.96x for fish.jpg and 3.84x for view.jpg. This demonstrates excellent scalability and confirms that the majority of the serial program's execution time was indeed spent on the Sobel filter computation, which has now been successfully parallelized.
+> The performance improvement was significant. With 4 processes, we achieved a speedup of up to 5.02x for fish.jpg and 8.96x for view.jpg. This demonstrates excellent scalability and confirms that the majority of the serial program's execution time was indeed spent on the Sobel filter computation, which has now been successfully parallelized.
 
 - Any tradeoffs between computation speed and communication overhead?
-  > Absolutely. The tradeoff is the time spent sending data between processes versus the time saved by performing computations simultaneously. Our results show that for a compute-bound task like the Sobel filter on moderately sized images, the benefits of parallel computation far outweigh the cost of communication overhead. The efficiency, which is close to 100% at 4 cores, indicates that our implementation is highly efficient and that communication overhead was successfully minimized.
+> Absolutely. The tradeoff is the time spent sending data between processes versus the time saved by performing computations simultaneously. Our results show that for a compute-bound task like the Sobel filter on moderately sized images, the benefits of parallel computation far outweigh the cost of communication overhead. The efficiency, which is close to 100% at 4 cores, indicates that our implementation is highly efficient and that communication overhead was successfully minimized.
+
+
 
 ## 7. Additional Notes (Optional)
-
 Suggestions for further improvement:
-
 - For clusters with multi-core nodes, a hybrid model could be more efficient. MPI would handle inter-node communication, while OpenMP would handle intra-node parallelization using threads, which have lower overhead than MPI processes.
-- For extremely large images (multiple gigabytes), the serial I/O on the master node would become a bottleneck. Implementing MPI-IO would allow all processes to read their portion of the image directly from the file in parallel.
+- For extremely large images (multiple gigabytes), the serial I/O on the master node would become a bottleneck. Implementing MPI-IO would allow all processes to read their portion of the image directly from the file in parallel. 
+
+
 
 ## 8. References
-
 1. Open MPI Documentation: [https://www.open-mpi.org/](https://www.open-mpi.org/)
 2. Pacheco, P. S. (2011). An Introduction to Parallel Programming. Morgan Kaufmann.
 3. Nix Reference Manual [https://nix.dev/reference/nix-manual.html](https://nix.dev/reference/nix-manual.html)
+
+
 
 ## 9. How to Run
 
@@ -443,7 +412,6 @@ This section provides instructions for compiling and running the code within the
 ### Setting Up the VMs
 
 Use the main Makefile to control the virtual machines:
-
 1. Start the VMs: Run `make up` to start the master and worker nodes in the background.
 2. Check VM Status: Use `make status` to see if the VMs are running.
 3. Sync and Build Code: Run `make remote-build` to copy the source code from your local machine to the master VM and compile it.
@@ -463,6 +431,6 @@ mpic++ open_mpi.cpp -o mpi -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core
 
 - To execute the parallel version (example with 4 processes):
 
-```bash
+```bash    
 mpirun --hostfile hostfile -np 4 --mca btl_tcp_if_include eth1 ./src/mpi 2 test_cases/view.jpg tc_results/view_multi.jpg > output.txt
 ```
