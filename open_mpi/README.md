@@ -65,28 +65,27 @@ This assignment aims to accelerate the Sobel edge detection algorithm using the 
 ## 2. Theory: Parallelizable Operations
 The Sobel algorithm essentially applies a 3x3 convolution kernel to every pixel of the image. The calculation of the gradient value for a single pixel depends only on itself and its 8 neighboring pixels. This makes the Sobel operation an ideal candidate for data parallelism because:
 
-- Pixel Independence: The computation for each pixel (away from the borders) is independent of the others.
-- Domain Decomposition: The image can be easily divided into several parts (e.g., horizontal strips or blocks), and each part can be processed simultaneously by a different process.
+- **Pixel Independence**: The computation for each pixel (away from the borders) is independent of the others.
+- **Domain Decomposition**: The image can be easily divided into several parts (e.g., horizontal strips or blocks), and each part can be processed simultaneously by a different process.
 
-I/O operations (reading and saving the image) are kept serial and handled by a single master process. Parallelizing I/O (using MPI-IO) would add significant complexity and is generally only effective for very large datasets. 
+**I/O operations** (reading and saving the image) are kept serial and handled by a single master process. Parallelizing I/O (using MPI-IO) would add significant complexity and is generally only effective for very large datasets. 
 
 
 ## 3. Code Changes and Implementation
 ### 3.1 Parallelization Strategy
-The strategy employed is one-dimensional domain decomposition, where the image is divided into several horizontal strips, and each MPI process is responsible for processing one strip.
-- Task Division: The master process (rank 0) is responsible for reading the image, dividing it into sections, and distributing them to the worker processes (including itself).
-- Boundary Handling: Since the Sobel kernel is 3x3, processing a row of pixels requires the row above and the row below it. To handle this, each worker process is sent its data strip plus one "ghost row" from its top and bottom neighbors. This ensures that each process can work independently without needing further communication during the computation phase.
-- Result Gathering: Once each process is finished, the processed results (which no longer include the ghost rows) are sent back to the master process, which assembles them into the final image.
+The strategy employed is **one-dimensional domain decomposition**, where the image is divided into several horizontal strips, and each MPI process is responsible for processing one strip.
+- **Task Division**: The master process (rank 0) is responsible for reading the image, dividing it into sections, and distributing them to the worker processes (including itself).
+- **Boundary Handling**: Since the Sobel kernel is 3x3, processing a row of pixels requires the row above and the row below it. To handle this, each worker process is sent its data strip plus one "ghost row" from its top and bottom neighbors. This ensures that each process can work independently without needing further communication during the computation phase.
+- **Result Gathering**: Once each process is finished, the processed results (which no longer include the ghost rows) are sent back to the master process, which assembles them into the final image.
 
 The communication flow is as follows:
-1. Broadcast Metadata: The master broadcasts essential information like image dimensions and filter mode to all processes.
-2. Manual Scatter with Overlap: The master manually sends overlapping image chunks to each worker using MPI_Send.
-3. Receive: Each worker receives its image chunk using MPI_Recv.
-4. Compute: All processes execute the Sobel filter on their local data.
-5. Gather: The results from all processes are collected back at the master using MPI_Gatherv. Gatherv is used because the number of rows might not be exactly equal for each process if the total row count is not perfectly divisible by the number of processes.
+1. **Broadcast Metadata**: The master broadcasts essential information like image dimensions and filter mode to all processes.
+2. **Manual Scatter with Overlap**: The master manually sends overlapping image chunks to each worker using MPI_Send.
+3. **Receive**: Each worker receives its image chunk using MPI_Recv.
+4. **Compute**: All processes execute the Sobel filter on their local data.
+5. **Gather**: The results from all processes are collected back at the master using MPI_Gatherv. Gatherv is used because the number of rows might not be exactly equal for each process if the total row count is not perfectly divisible by the number of processes.
 
 ### 3.2 Code Modifications
-Document the changes you made to the code. Use **before vs after** snippets and provide explanations.
 
 The primary changes occur in the main function, where the simple, linear execution of the serial version is replaced with a multi-stage parallel workflow involving data distribution, computation, and result aggregation.
 
