@@ -37,7 +37,7 @@ sudo pacman -S nix
 ```
 Or on Debian/Ubuntu:
 ```bash
-sudo apt-get install nix
+sh <(curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install)
 ```
 
 Then, enable the Nix daemon:
