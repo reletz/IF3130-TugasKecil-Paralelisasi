@@ -31,8 +31,7 @@
 
 Compile command:
 ```bash
-g++ open_mp.cpp -o open_mp -fopenmp -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core -lopencv_imgproc -lo
-pencv_highgui -lopencv_imgcodecs
+g++ open_mp.cpp -o open_mp -fopenmp -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs
 ```
 
 Run command:
