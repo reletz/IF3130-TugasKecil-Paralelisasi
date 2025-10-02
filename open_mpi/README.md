@@ -76,32 +76,30 @@ This assignment aims to accelerate the Sobel edge detection algorithm using the 
 
 The Sobel algorithm essentially applies a 3x3 convolution kernel to every pixel of the image. The calculation of the gradient value for a single pixel depends only on itself and its 8 neighboring pixels. This makes the Sobel operation an ideal candidate for data parallelism because:
 
-- Pixel Independence: The computation for each pixel (away from the borders) is independent of the others.
-- Domain Decomposition: The image can be easily divided into several parts (e.g., horizontal strips or blocks), and each part can be processed simultaneously by a different process.
+- **Pixel Independence**: The computation for each pixel (away from the borders) is independent of the others.
+- **Domain Decomposition**: The image can be easily divided into several parts (e.g., horizontal strips or blocks), and each part can be processed simultaneously by a different process.
 
-I/O operations (reading and saving the image) are kept serial and handled by a single master process. Parallelizing I/O (using MPI-IO) would add significant complexity and is generally only effective for very large datasets.
+**I/O operations** (reading and saving the image) are kept serial and handled by a single master process. Parallelizing I/O (using MPI-IO) would add significant complexity and is generally only effective for very large datasets.
 
 ## 3. Code Changes and Implementation
 
 ### 3.1 Parallelization Strategy
 
-The strategy employed is one-dimensional domain decomposition, where the image is divided into several horizontal strips, and each MPI process is responsible for processing one strip.
+The strategy employed is **one-dimensional domain decomposition**, where the image is divided into several horizontal strips, and each MPI process is responsible for processing one strip.
 
-- Task Division: The master process (rank 0) is responsible for reading the image, dividing it into sections, and distributing them to the worker processes (including itself).
-- Boundary Handling: Since the Sobel kernel is 3x3, processing a row of pixels requires the row above and the row below it. To handle this, each worker process is sent its data strip plus one "ghost row" from its top and bottom neighbors. This ensures that each process can work independently without needing further communication during the computation phase.
-- Result Gathering: Once each process is finished, the processed results (which no longer include the ghost rows) are sent back to the master process, which assembles them into the final image.
+- **Task Division**: The master process (rank 0) is responsible for reading the image, dividing it into sections, and distributing them to the worker processes (including itself).
+- **Boundary Handling**: Since the Sobel kernel is 3x3, processing a row of pixels requires the row above and the row below it. To handle this, each worker process is sent its data strip plus one "ghost row" from its top and bottom neighbors. This ensures that each process can work independently without needing further communication during the computation phase.
+- **Result Gathering**: Once each process is finished, the processed results (which no longer include the ghost rows) are sent back to the master process, which assembles them into the final image.
 
 The communication flow is as follows:
 
-1. Broadcast Metadata: The master broadcasts essential information like image dimensions and filter mode to all processes.
-2. Manual Scatter with Overlap: The master manually sends overlapping image chunks to each worker using MPI_Send.
-3. Receive: Each worker receives its image chunk using MPI_Recv.
-4. Compute: All processes execute the Sobel filter on their local data.
-5. Gather: The results from all processes are collected back at the master using MPI_Gatherv. Gatherv is used because the number of rows might not be exactly equal for each process if the total row count is not perfectly divisible by the number of processes.
+1. **Broadcast Metadata**: The master broadcasts essential information like image dimensions and filter mode to all processes.
+2. **Manual Scatter with Overlap**: The master manually sends overlapping image chunks to each worker using MPI_Send.
+3. **Receive**: Each worker receives its image chunk using MPI_Recv.
+4. **Compute**: All processes execute the Sobel filter on their local data.
+5. **Gather**: The results from all processes are collected back at the master using MPI_Gatherv. Gatherv is used because the number of rows might not be exactly equal for each process if the total row count is not perfectly divisible by the number of processes.
 
 ### 3.2 Code Modifications
-
-Document the changes you made to the code. Use **before vs after** snippets and provide explanations.
 
 The primary changes occur in the main function, where the simple, linear execution of the serial version is replaced with a multi-stage parallel workflow involving data distribution, computation, and result aggregation.
 
@@ -262,14 +260,15 @@ MPI_Finalize();
 return 0;
 ```
 
-##### 5. Optimized Sobel Algorithm:
+##### 5. Algorithm Optimizations
 
-The Sobel algorithm implementation includes optimizations that improve performance while maintaining identical output to the serial version:
+Two key optimizations were implemented to improve performance while maintaining identical output:
+
+**A. Pre-computing Threshold Levels:**
+In the serial version, threshold levels for multi-level thresholding (mode 2) were computed inside the nested loop, causing redundant calculations. In the parallel version, these levels are pre-computed once before entering the parallel region:
 
 ```cpp
-// From: open_mpi.cpp - Optimized Sobel implementation
-
-// Pre-compute levels outside nested loop (optimization)
+// Moved outside the parallel region for efficiency
 std::vector<int> levels;
 if (mode == 2){
     int bins = thresholds.size() + 1;
@@ -278,34 +277,34 @@ if (mode == 2){
         levels[i] = (255 * i) / (bins - 1);
     }
 }
+```
 
-for(int y=1;y<in.h-1;y++){
-    for(int x=1;x<in.w-1;x++){
-        int sx=0, sy=0;
-        for(int ky=-1; ky<=1; ky++)
-            for(int kx=-1; kx<=1; kx++){
-                int px=in.at(x+kx,y+ky);
-                sx += px * Gx[ky+1][kx+1];
-                sy += px * Gy[ky+1][kx+1];
-            }
-        int g_squared = sx*sx + sy*sy;  // Compute squared gradient
+**B. Reduced sqrt Computation:**
+The serial version computed sqrt for every pixel regardless of mode. The optimized version only computes sqrt when the actual gradient magnitude is needed (mode 0), using squared comparisons for threshold modes:
 
-        if (mode == 0) {
-            int g = std::sqrt(g_squared);  // Only compute sqrt when needed
-            out.at(x,y) = (g > 255) ? 255 : g;
-        }
-        else if (mode == 1) {
-            int threshold_squared = thresholds[0] * thresholds[0];
-            out.at(x,y) = (g_squared > threshold_squared) ? 0 : 255;  // Compare squared values
-        }
-        else {
-            int idx = 0;
-            while(idx < thresholds.size() && g_squared > thresholds[idx] * thresholds[idx]) idx++;
-            out.at(x,y) = levels[idx];  // Use pre-computed levels
-        }
-    }
+```cpp
+// Before: Always computed sqrt
+int g = std::sqrt(sx*sx + sy*sy);
+
+// After: Only compute sqrt when needed
+int g_squared = sx*sx + sy*sy;
+
+if (mode == 0) {
+    int g = std::sqrt(g_squared);  // Only for gradient mode
+    out.at(x,y) = (g > 255) ? 255 : g;
+}
+else if (mode == 1) {
+    int threshold_squared = thresholds[0] * thresholds[0];
+    out.at(x,y) = (g_squared > threshold_squared) ? 0 : 255;  // Compare squared values
+}
+else {
+    int idx = 0;
+    while(idx < thresholds.size() && g_squared > thresholds[idx] * thresholds[idx]) idx++;
+    out.at(x,y) = levels[idx];  // Use pre-computed levels
 }
 ```
+
+These optimizations significantly reduce computational overhead: the level pre-computation eliminates redundant calculations in the inner loop, while sqrt elimination reduces expensive floating-point operations in threshold-based modes.
 
 **Key optimizations implemented:**
 

@@ -68,7 +68,7 @@
           pkg-config
 
           vim
-          htop
+          btop
         ];
 
         environment.variables = {
