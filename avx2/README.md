@@ -40,9 +40,10 @@ The core operations in the Sobel algorithm are well-suited for parallelization d
 - Vectorization: With AVX2, we can load a group of adjacent pixels (e.g., 8 unsigned char pixels) into a 256-bit register and apply mathematical operations (addition, subtraction) to all pixels in the register simultaneously.
 - Non-Parallel Operations: I/O operations (reading and saving the image) remain serial as they do not gain a significant performance benefit from vectorization and are inherently sequential.
 
-
 ## 3. Code Changes and Implementation
+
 ### 3.1 Parallelization Strategy
+
 The strategy employed is SIMD vectorization with AVX2. The serial logic that processes one pixel per iteration is modified to process 8 pixels per iteration.
 1. Vectorized Loop: The main for loop iterating over the image columns (`x`) is changed to advance by 8 steps (`x += 8`).
 2. Aligned Memory: The Image struct was modified to use `_mm_malloc` to allocate memory with 32-byte alignment. This improves the performance of AVX load/store operations.
@@ -129,7 +130,6 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
 }
 ```
 
-
 ## 4. Results and Evaluation
 
 ### 4.0 Test Cases (Self-made)
@@ -171,11 +171,10 @@ The parallel AVX2 version produces an output image that is visually and pixel-id
 | ![input](../test_cases/fish.jpg) | ![serial](../serial/output/fish_binary.jpg) | ![parallel](output/fish_binary.jpg) |
 | ![input](../test_cases/birds.jpg) | ![serial](../serial/output/birds_multi128.jpg) | ![parallel](output/birds_multi128.jpg) |
 
-
-
 ### 4.2 Performance Comparison
 
 #### Serial Version
+
 | Image Name | Input Time (ms) | Processing Time (ms) | Output Time (ms) | Total Time (ms) |
 |------------|-----------------|-----------------------|------------------|-----------------|
 | snake.jpg | 8                | 52                      |  9                | 69                |
@@ -193,9 +192,8 @@ The parallel AVX2 version produces an output image that is visually and pixel-id
 | fish.jpg | 2           | 127                | 140                      | 99                 | 366             |
 | birds.jpg | 3           | 1                | 6                      | 1                 | 8              |
 
-
-
 ### 4.3 Speedup and Efficiency
+
 - **Speedup** = Serial Time / Parallel Time  
 - **Efficiency**:
 
@@ -216,8 +214,8 @@ Vectorization Efficiency = Speedup / Vector Width
 |fish.jpg|452|140|3.23x|8|40.4%|
 |birds.jpg|41|6|6.83x|8|85.4%|
 
-
 ## 5. Discussion
+
 - What worked well in your parallelization approach?
 > The SIMD vectorization strategy using AVX2 was highly effective. By processing 8 pixels in a single instruction cycle, we were able to significantly reduce the total number of operations required to process an image. The performance data clearly shows this, with the most significant speedup of 6.83x on the `birds.jpg` test case. The use of aligned memory (`_mm_malloc`) and compile-time optimizations (`if constexpr`) likely contributed to this success by reducing memory access penalties and eliminating runtime branching. The approach worked best on larger images like view.jpg and fish.jpg, where the computational workload was high enough to amortize the initial overhead of vectorization.
 
@@ -231,8 +229,6 @@ Vectorization Efficiency = Speedup / Vector Width
 > - Serial Remainder: The serial loop that processes pixels at the end of each row (for widths not divisible by 8) adds to the execution time and reduces overall parallelism, a concept explained by Amdahl's Law.
 > The efficiency was lower on smaller or less complex images (`lion.jpg`, `snake.jpg`), where this overhead constituted a larger portion of the total processing time.
 
-
-
 ## 6. Conclusion
 - Was parallelization effective?
 > Yes, parallelization using AVX2 was unequivocally effective. It leveraged instruction-level parallelism to achieve substantial performance gains on a single CPU core.
@@ -243,8 +239,6 @@ Vectorization Efficiency = Speedup / Vector Width
 - Any tradeoffs between computation speed and communication overhead?
 > The primary tradeoff was not with communication overhead (as this is a single-process model) but with development complexity. The performance gains came at the cost of significantly more complex, less maintainable, and hardware-specific code. The developer time required to implement and debug the AVX2 version was far greater than for the serial version.
 
-
-
 ## 7. Additional Notes (Optional)
 For further improvement, a hybrid approach could be explored. For example, combining OpenMP with AVX2:
 - OpenMP would divide the image rows among different CPU threads.
@@ -252,12 +246,8 @@ For further improvement, a hybrid approach could be explored. For example, combi
 
 This combination would leverage both thread-level parallelism (across cores) and instruction-level parallelism (within each core) simultaneously.
 
-
-
 ## 8. References
 1. Intel Intrinsics Guide. (n.d.). Retrieved from [https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html)
-
-
 
 ## 9. How to Run
 
