@@ -40,17 +40,6 @@ Or on Debian/Ubuntu:
 sudo apt-get install openmp
 ```
 
-Compile command:
-```bash
-g++ open_mp.cpp -o open_mp -fopenmp -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core -lopencv_imgproc -lo
-pencv_highgui -lopencv_imgcodecs
-```
-
-Run command:
-```bash
-./open_mp <thread_number> <n> input.jpg output.jpg > output.txt
-```
-
 ## 1. Introduction
 This assignment aims to accelerate the Sobel edge detection algorithm using OpenMP. The provided serial code, serial.cpp, will be converted into a parallel version, open_mp.cpp, which uses shared‑memory multithreading to distribute the Sobel filter work across CPU cores and reduce overall processing time.
 
@@ -277,4 +266,17 @@ List any references you used (books, lecture notes, research papers, or online s
 
 
 ## 9. How to Run
-How to run the programs (compiling and running process must atleast)
+
+This section provides instructions for compiling and running the code.
+
+### Executing the Program
+- To compile:
+```bash
+g++ open_mp.cpp -o open_mp -fopenmp -I$OPENCV_INCLUDE/opencv4 -L$OPENCV_LIB -lopencv_core -lopencv_imgproc -lo
+pencv_highgui -lopencv_imgcodecs
+```
+
+- To execute the parallel version
+```bash
+./open_mp <thread_number> <n> input.jpg output.jpg > output.txt
+```
