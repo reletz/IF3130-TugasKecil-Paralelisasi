@@ -30,6 +30,18 @@
 
 Make sure your processor supports AVX2.
 
+Don't forget to install OpenCV:
+
+```bash
+sudo pacman -S opencv
+```
+
+Or on Debian/Ubuntu:
+
+```bash
+sudo apt-get install opencv
+```
+
 ## 1. Introduction
 This assignment aims to accelerate the Sobel edge detection algorithm using Advanced Vector Extensions 2 (AVX2). The provided serial code (`serial.cpp`) is converted into a parallel version (`avx2.cpp`) that leverages instruction-level parallelism within a single CPU. The Sobel algorithm operates by convolving a 3x3 kernel over each pixel of an image to approximate its gradient. The goal is to significantly reduce processing time by applying SIMD (Single Instruction, Multiple Data) operations, where a single instruction can process multiple data points (pixels) simultaneously.
 

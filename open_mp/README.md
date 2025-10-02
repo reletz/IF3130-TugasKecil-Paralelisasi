@@ -35,16 +35,16 @@ We use OpenMP as a parallelization library for this project
 
 Setup steps:
 
-1. Install OpenMP. On Arch Linux:
+1. Install OpenMP and OpenCV. On Arch Linux:
 
 ```bash
-sudo pacman -S openmp
+sudo pacman -S openmp opencv
 ```
 
 Or on Debian/Ubuntu:
 
 ```bash
-sudo apt-get install openmp
+sudo apt-get install openmp libomp-dev libopencv-dev
 ```
 
 ## 1. Introduction
