@@ -30,8 +30,6 @@ Image loadJPG(const std::string &f) {
     cv::Mat mat = cv::imread(f, cv::IMREAD_GRAYSCALE);
     if(mat.empty()) throw std::runtime_error("Failed to load image");
     Image img(mat.cols, mat.rows);
-    
-    // Image img{mat.cols, mat.rows, std::vector<unsigned char>(mat.cols * mat.rows)};
     for(int y=0; y<mat.rows; y++)
         for(int x=0; x<mat.cols; x++)
             img.at(x,y) = mat.at<uchar>(y,x);
@@ -66,11 +64,38 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
     alignas(32) __m256i level_vecs[256];
     if constexpr (mode == 2) {
         int bins = thresholds.size() + 1;
-        // level_vecs.resize(bins);
         for(int i = 0; i < bins; i++){
             level_vecs[i] = _mm256_set1_epi32((255 * i) / (bins - 1));
         }
     }
+
+    auto levels_mode = [&](__m256i g_vec) -> __m256i {
+        if constexpr (mode == 0){
+            __m256i gg_vec = _mm256_cvttps_epi32(_mm256_sqrt_ps(_mm256_cvtepi32_ps(g_vec)));
+            __m256i val_255 = _mm256_set1_epi32(255);
+            return _mm256_min_epi32(gg_vec, val_255);
+        }
+        else if constexpr (mode == 1){
+            // __m256i threshold_vec = _mm256_set1_epi32(thresholds[0]);
+            int threshold_squared = thresholds[0] * thresholds[0];
+            __m256i threshold_vec = _mm256_set1_epi32(threshold_squared);
+            __m256i zeros = _mm256_setzero_si256();
+            __m256i val_255 = _mm256_set1_epi32(255);
+            __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
+            return _mm256_blendv_epi8(val_255, zeros, mask);
+        }
+        else if constexpr (mode == 2){
+            __m256i result = level_vecs[0];
+            for (size_t i = 0; i < thresholds.size(); ++i) {
+                // __m256i threshold_vec = _mm256_set1_epi32(thresholds[i]);
+                int threshold_squared = thresholds[i] * thresholds[i];
+                __m256i threshold_vec = _mm256_set1_epi32(threshold_squared);
+                __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
+                result = _mm256_blendv_epi8(result, level_vecs[i+1], mask);
+            }
+            return result;
+        }
+    };
 
     bool hasRemainder = (in.w - 1) % 8 != 0;
     int mainLoopEnd = in.w - 9;
@@ -131,28 +156,8 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
             __m256i sy_sq = _mm256_mullo_epi32(sy_vec, sy_vec);
             __m256i g = _mm256_add_epi32(sx_sq, sy_sq);
 
-            __m256i g_vec = _mm256_cvttps_epi32(_mm256_sqrt_ps(_mm256_cvtepi32_ps(g)));
-
-            if constexpr (mode == 0){
-                __m256i val_255 = _mm256_set1_epi32(255);
-                g_vec = _mm256_min_epi32(g_vec, val_255);
-            }
-            else if constexpr (mode == 1){
-                __m256i threshold_vec = _mm256_set1_epi32(thresholds[0]);
-                __m256i zeros = _mm256_setzero_si256();
-                __m256i val_255 = _mm256_set1_epi32(255);
-                __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
-                g_vec = _mm256_blendv_epi8(val_255, zeros, mask);
-            }
-            else if constexpr (mode == 2){
-                __m256i result = level_vecs[0];
-                for (size_t i = 0; i < thresholds.size(); ++i) {
-                    __m256i threshold_vec = _mm256_set1_epi32(thresholds[i]);
-                    __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
-                    result = _mm256_blendv_epi8(g_vec, level_vecs[i+1], mask);
-                }
-                g_vec = result;
-            }
+            __m256i g_squared = _mm256_add_epi32(sx_sq, sy_sq);
+            __m256i g_vec = levels_mode(g_squared);
 
             __m256i zeros_256 = _mm256_setzero_si256();
             __m256i res_16bit_lanes = _mm256_packus_epi32(g_vec, zeros_256);
@@ -218,28 +223,8 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
             __m256i sy_sq = _mm256_mullo_epi32(sy_vec, sy_vec);
             __m256i g = _mm256_add_epi32(sx_sq, sy_sq);
 
-            __m256i g_vec = _mm256_cvttps_epi32(_mm256_sqrt_ps(_mm256_cvtepi32_ps(g)));
-
-            if constexpr (mode == 0){
-                __m256i val_255 = _mm256_set1_epi32(255);
-                g_vec = _mm256_min_epi32(g_vec, val_255);
-            }
-            else if constexpr (mode == 1){
-                __m256i threshold_vec = _mm256_set1_epi32(thresholds[0]);
-                __m256i zeros = _mm256_setzero_si256();
-                __m256i val_255 = _mm256_set1_epi32(255);
-                __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
-                g_vec = _mm256_blendv_epi8(val_255, zeros, mask);
-            }
-            else if constexpr (mode == 2){
-                __m256i result = level_vecs[0];
-                for (size_t i = 0; i < thresholds.size(); ++i) {
-                    __m256i threshold_vec = _mm256_set1_epi32(thresholds[i]);
-                    __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
-                    result = _mm256_blendv_epi8(g_vec, level_vecs[i+1], mask);
-                }
-                g_vec = result;
-            }
+            __m256i g_squared = _mm256_add_epi32(sx_sq, sy_sq);
+            __m256i g_vec = levels_mode(g_squared);
 
             __m256i zeros_256 = _mm256_setzero_si256();
             __m256i res_16bit_lanes = _mm256_packus_epi32(g_vec, zeros_256);
