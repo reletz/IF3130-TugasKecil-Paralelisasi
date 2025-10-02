@@ -4,7 +4,7 @@ Program Type : Paralel (Open MPI)
 Mode         : 0
 ------------------------------------------------------
 Timing (ms)
-  Input      : 5
-  Processing : 11
+  Input      : 7
+  Processing : 10
   Output     : 6
 ======================================================
