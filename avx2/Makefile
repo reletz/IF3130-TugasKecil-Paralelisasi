@@ -1,28 +1,25 @@
 CXX := g++
-BUILD_DIR := build
 TARGET := avx2
 
-CXXFLAGS := -std=gnu++17  -mavx2 -mfma -march=native
+CXXFLAGS := -mavx2 -mfma -march=native
 LDFLAGS := -I$$OPENCV_INCLUDE -L$$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs
 
 SRC_CPP := $(wildcard src/*.cpp)
 SRCS := $(SRC_CPP)
 
-OBJS := $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(SRC_CPP))
+OBJS := $(patsubst src/%.cpp,%.o,$(SRC_CPP))
 
-.PHONY: all clean distclean
+.PHONY: all clean
 
-all: $(BUILD_DIR)/$(TARGET)
+all: $(TARGET)
 
-$(BUILD_DIR)/$(TARGET): $(OBJS)
+$(TARGET): $(OBJS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -o $@ $^
+	rm *.o
 
-$(BUILD_DIR)/%.o: src/%.cpp
-	@mkdir -p $(BUILD_DIR)
+%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -c $< -o $@
 
 clean:
-	@rm -rf $(BUILD_DIR)
-
-distclean: clean
+	@rm -f $(OBJS) $(TARGET)
