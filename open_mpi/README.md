@@ -317,7 +317,7 @@ return 0;
 
 ### 4.1 Correctness
 
-| Input Image | Serial Output | Parallel Output (4 Cores) |
+| Input Image | Serial Output | Parallel Output (4 Processes) |
 |-------------|---------------|-----------------|
 | ![input](../test_cases/snake.jpg) | ![serial](../serial/output/snake_binary.jpg) | ![parallel](tc_results/snake_binary.jpg) |
 | ![input](../test_cases/lion.jpg) | ![serial](../serial/output/lion_gradient.jpg) | ![parallel](tc_results/lion_gradient.jpg) |
@@ -334,7 +334,7 @@ return 0;
 | view.jpg | 19                | 215                      | 17                 | 251                |
 
 #### Parallel Version
-| Image Name | Core Number | Input Time (ms) | Processing Time (ms) | Output Time (ms) | Total Time (ms) |
+| Image Name | Process Number | Input Time (ms) | Processing Time (ms) | Output Time (ms) | Total Time (ms) |
 |------------|-------------|-----------------|-----------------------|------------------|-----------------|
 | fish.jpg | 2           | 90                | 179                      | 51                 | 320             |
 | fish.jpg | 3           | 91                | 119                      | 50                 | 260             |
@@ -350,14 +350,14 @@ return 0;
 - **Efficiency** = Speedup / Number of Processes  
 
 **fish.jpg (Serial Processing Time: 452 ms)**
-|Core Number| Parallel Processing Time (ms) | Speedup | Efficiency |
+|Process Number| Parallel Processing Time (ms) | Speedup | Efficiency |
 |---|---|---|---|
 |2|179|2.52x|126.2%|
 |3|119|3.79x|126.6%|
 |4|90|5.02x|125.5%|
 
 **view.jpg (Serial Processing Time: 215 ms)**
-|Core Number|Parallel Processing Time (ms)|Speedup|Efficiency|
+|Process Number|Parallel Processing Time (ms)|Speedup|Efficiency|
 |---|---|---|---|
 |2|45|4.77x|238.8%|
 |3|32|6.72x|224.0%|
@@ -387,7 +387,7 @@ Summarize your findings:
 > The performance improvement was significant. With 4 processes, we achieved a speedup of up to 5.02x for fish.jpg and 8.96x for view.jpg. This demonstrates excellent scalability and confirms that the majority of the serial program's execution time was indeed spent on the Sobel filter computation, which has now been successfully parallelized.
 
 - Any tradeoffs between computation speed and communication overhead?
-> Absolutely. The tradeoff is the time spent sending data between processes versus the time saved by performing computations simultaneously. Our results show that for a compute-bound task like the Sobel filter on moderately sized images, the benefits of parallel computation far outweigh the cost of communication overhead. The efficiency, which is close to 100% at 4 cores, indicates that our implementation is highly efficient and that communication overhead was successfully minimized.
+> Absolutely. The tradeoff is the time spent sending data between processes versus the time saved by performing computations simultaneously. Our results show that for a compute-bound task like the Sobel filter on moderately sized images, the benefits of parallel computation far outweigh the cost of communication overhead. The efficiency, which is close to 100% at 4 processes, indicates that our implementation is highly efficient and that communication overhead was successfully minimized.
 
 
 

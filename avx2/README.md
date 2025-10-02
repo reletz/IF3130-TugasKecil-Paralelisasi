@@ -137,7 +137,7 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
 1. Test Case 1: High-Frequency Detail (Binary Threshold)
     - Image: snake.jpg
     - n value: 1
-    - Rationale: This test evaluates how well the algorithm identifies fine, complex edges. The scales of the snake provide hi| view.jpg | 4           | 18                | 56                      | 15                 | 89               |gh-frequency details. Using n=1 (binary threshold) will create a stark, high-contrast output, making it easy to see if the main patterns of the scales are correctly detected. It's a good test for correctness.
+    - Rationale: This test evaluates how well the algorithm identifies fine, complex edges. The scales of the snake provide high-frequency details. Using n=1 (binary threshold) will create a stark, high-contrast output, making it easy to see if the main patterns of the scales are correctly detected. It's a good test for correctness.
 
 2. Test Case 2: Smooth Gradients and Broad Edges (Gradient Magnitude)
     - Image: lion.jpg
@@ -186,11 +186,11 @@ The parallel AVX2 version produces an output image that is visually and pixel-id
 #### Parallel Version
 | Image Name | Core Number | Input Time (ms) | Processing Time (ms) | Output Time (ms) | Total Time (ms) |
 |------------|-------------|-----------------|-----------------------|------------------|-----------------|
-| snake.jpg | 2           | 13                | 14                      | 13                 | 37             |
-| lion.jpg | 3           | 11                | 16                      | 12                 | 39             |
-| view.jpg | 4           | 28                | 37                      | 29                 | 94             |
-| fish.jpg | 2           | 127                | 140                      | 99                 | 366             |
-| birds.jpg | 3           | 1                | 6                      | 1                 | 8              |
+| snake.jpg | 1           | 13                | 14                      | 13                 | 37             |
+| lion.jpg | 1           | 11                | 16                      | 12                 | 39             |
+| view.jpg | 1           | 28                | 37                      | 29                 | 94             |
+| fish.jpg | 1           | 127                | 140                      | 99                 | 366             |
+| birds.jpg | 1           | 1                | 6                      | 1                 | 8              |
 
 ### 4.3 Speedup and Efficiency
 
