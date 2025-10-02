@@ -25,14 +25,6 @@ struct Image {
     }
 };
 
-// // image struct
-// struct Image {
-//     int w, h;
-//     std::vector<unsigned char> p;
-//     unsigned char& at(int x, int y) { return p[y * w + x]; }
-//     const unsigned char& at(int x, int y) const { return p[y * w + x]; }
-// };
-
 // ini buat iamge load dan save (yang diproses jpg), ini mau di serial atau paralel gaadabedanya
 Image loadJPG(const std::string &f) {
     cv::Mat mat = cv::imread(f, cv::IMREAD_GRAYSCALE);
@@ -57,8 +49,6 @@ void saveJPG(const Image &img, const std::string &f) {
 // implementasi algorimta nya
 template<int mode>
 Image sobel(const Image &in, const std::vector<int>& thresholds) {
-    int Gx_scalar[3][3]={{-1,0,1},{-2,0,2},{-1,0,1}};
-    int Gy_scalar[3][3]={{1,2,1},{0,0,0},{-1,-2,-1}};
     __m256i Gx[9] = {
         _mm256_set1_epi32(-1), _mm256_set1_epi32(0), _mm256_set1_epi32(1),
         _mm256_set1_epi32(-2), _mm256_set1_epi32(0), _mm256_set1_epi32(2),
@@ -82,18 +72,13 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
         }
     }
 
+    bool hasRemainder = (in.w - 1) % 8 != 0;
+    int mainLoopEnd = in.w - 9;
+    int remainderStart = in.w - 9;
+
     for(int y=1;y<in.h-1;y++){
-        // __m256i top_rowc1 = _mm256_loadu_si256((__m256i*)&in.at(0,y-1));
-        // __m256i top_rowc2 = _mm256_loadu_si256((__m256i*)&in.at(8,y-1));
-
-        // __m256i mid_rowc1 = _mm256_loadu_si256((__m256i*)&in.at(0,y));
-        // __m256i mid_rowc2 = _mm256_loadu_si256((__m256i*)&in.at(8,y));
-
-        // __m256i bot_rowc1 = _mm256_loadu_si256((__m256i*)&in.at(0,y+1));
-        // __m256i bot_rowc2 = _mm256_loadu_si256((__m256i*)&in.at(8,y+1));
-        int x =1;
-
-        for(;x<=in.w-9;x+=8){
+        int x = 1;
+        for(;x<=mainLoopEnd;x+=8){
             __m128i v_tl_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y - 1));
             __m128i v_tc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y - 1));
             __m128i v_tr_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y - 1));
@@ -146,9 +131,6 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
             __m256i sy_sq = _mm256_mullo_epi32(sy_vec, sy_vec);
             __m256i g = _mm256_add_epi32(sx_sq, sy_sq);
 
-            // __m256 g_sqf = _mm256_cvtepi32_ps(g);
-            // __m256 g_f = _mm256_sqrt_ps(g_sqf);
-            // __m256i g_vec = _mm256_cvttps_epi32(g_f);
             __m256i g_vec = _mm256_cvttps_epi32(_mm256_sqrt_ps(_mm256_cvtepi32_ps(g)));
 
             if constexpr (mode == 0){
@@ -174,94 +156,134 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
 
             __m256i zeros_256 = _mm256_setzero_si256();
             __m256i res_16bit_lanes = _mm256_packus_epi32(g_vec, zeros_256);
+            //move upper lane lower 64 bits to lower lane upper 64 bits
             __m256i permuted = _mm256_permute4x64_epi64(res_16bit_lanes, 0xD8); // 11011000
             __m128i res_16bit = _mm256_castsi256_si128(permuted);
 
             __m128i zeros_128 = _mm_setzero_si128();
             __m128i finalP = _mm_packus_epi16(res_16bit, zeros_128);
             _mm_storel_epi64((__m128i*)&out.at(x, y), finalP);
-
-            // top_rowc1 = top_rowc2;
-            // mid_rowc1 = mid_rowc2;
-            // bot_rowc1 = bot_rowc2;
-            // top_rowc2 = _mm256_loadu_si256((__m256i*)&in.at(x + 16 -1, y - 1));
-            // mid_rowc2 = _mm256_loadu_si256((__m256i*)&in.at(x + 16 -1, y));
-            // bot_rowc2 = _mm256_loadu_si256((__m256i*)&in.at(x + 16 -1, y + 1));
         }
-        for(;x<in.w-1;x++){
-            int sx=0, sy=0;
-            for(int ky=-1; ky<=1; ky++)
-                for(int kx=-1; kx<=1; kx++){
-                    int px=in.at(x+kx,y+ky);
-                    sx += px * Gx_scalar[ky+1][kx+1];
-                    sy += px * Gy_scalar[ky+1][kx+1];
-                }
-            int g = std::sqrt(sx*sx + sy*sy);
+        if (hasRemainder){ 
+            x = remainderStart;
+            __m128i v_tl_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y - 1));
+            __m128i v_tc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y - 1));
+            __m128i v_tr_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y - 1));
+            
+            __m128i v_ml_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y));
+            __m128i v_mc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y));
+            __m128i v_mr_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y));
 
-            if(mode == 0) { 
-                out.at(x,y) = (g > 255) ? 255 : g;
-            }
-            else if(mode == 1) { 
-                out.at(x,y) = (g > thresholds[0]) ? 0 : 255;
-            }
-            else {
-                int bins = thresholds.size() + 1;
-                std::vector<int> levels(bins);
-                for(int i=0; i<bins; i++){
-                    levels[i] = (255 * i) / (bins - 1);
-                }
+            __m128i v_bl_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y + 1));
+            __m128i v_bc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y + 1));
+            __m128i v_br_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y + 1));
 
-                int idx = 0;
-                while(idx < thresholds.size() && g > thresholds[idx]) idx++;
-                out.at(x,y) = levels[idx];
+            __m256i v_tl = _mm256_cvtepu8_epi32(v_tl_8b);
+            __m256i v_tc = _mm256_cvtepu8_epi32(v_tc_8b);
+            __m256i v_tr = _mm256_cvtepu8_epi32(v_tr_8b);
+
+            __m256i v_ml = _mm256_cvtepu8_epi32(v_ml_8b);
+            __m256i v_mc = _mm256_cvtepu8_epi32(v_mc_8b);
+            __m256i v_mr = _mm256_cvtepu8_epi32(v_mr_8b);
+            
+            __m256i v_bl = _mm256_cvtepu8_epi32(v_bl_8b);
+            __m256i v_bc = _mm256_cvtepu8_epi32(v_bc_8b);
+            __m256i v_br = _mm256_cvtepu8_epi32(v_br_8b);
+
+            __m256i sx_vec = _mm256_setzero_si256();
+            __m256i sy_vec = _mm256_setzero_si256();
+
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_tl, Gx[0]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_tl, Gy[0]));
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_tc, Gx[1]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_tc, Gy[1]));
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_tr, Gx[2]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_tr, Gy[2]));
+
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_ml, Gx[3]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_ml, Gy[3]));
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_mc, Gx[4]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_mc, Gy[4]));
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_mr, Gx[5]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_mr, Gy[5]));
+
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_bl, Gx[6]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_bl, Gy[6]));
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_bc, Gx[7]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_bc, Gy[7]));
+            sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_br, Gx[8]));
+            sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_br, Gy[8]));
+
+            __m256i sx_sq = _mm256_mullo_epi32(sx_vec, sx_vec);
+            __m256i sy_sq = _mm256_mullo_epi32(sy_vec, sy_vec);
+            __m256i g = _mm256_add_epi32(sx_sq, sy_sq);
+
+            __m256i g_vec = _mm256_cvttps_epi32(_mm256_sqrt_ps(_mm256_cvtepi32_ps(g)));
+
+            if constexpr (mode == 0){
+                __m256i val_255 = _mm256_set1_epi32(255);
+                g_vec = _mm256_min_epi32(g_vec, val_255);
             }
+            else if constexpr (mode == 1){
+                __m256i threshold_vec = _mm256_set1_epi32(thresholds[0]);
+                __m256i zeros = _mm256_setzero_si256();
+                __m256i val_255 = _mm256_set1_epi32(255);
+                __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
+                g_vec = _mm256_blendv_epi8(val_255, zeros, mask);
+            }
+            else if constexpr (mode == 2){
+                __m256i result = level_vecs[0];
+                for (size_t i = 0; i < thresholds.size(); ++i) {
+                    __m256i threshold_vec = _mm256_set1_epi32(thresholds[i]);
+                    __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
+                    result = _mm256_blendv_epi8(g_vec, level_vecs[i+1], mask);
+                }
+                g_vec = result;
+            }
+
+            __m256i zeros_256 = _mm256_setzero_si256();
+            __m256i res_16bit_lanes = _mm256_packus_epi32(g_vec, zeros_256);
+            //move upper lane lower 64 bits to lower lane upper 64 bits
+            __m256i permuted = _mm256_permute4x64_epi64(res_16bit_lanes, 0xD8); // 11011000
+            __m128i res_16bit = _mm256_castsi256_si128(permuted);
+
+            __m128i zeros_128 = _mm_setzero_si128();
+            __m128i finalP = _mm_packus_epi16(res_16bit, zeros_128);
+            _mm_storel_epi64((__m128i*)&out.at(x, y), finalP);
         }
     }
-    for (int y = 0; y < in.h; ++y) {
-        out.at(0, y) = in.at(0, y);
-        out.at(in.w - 1, y) = in.at(in.w - 1, y);
-    }
-    for (int x = 1; x < in.w - 1; ++x) {
-        out.at(x, 0) = in.at(x, 0);
-        out.at(x, in.h - 1) = in.at(x, in.h - 1);
-    }
-    // for(int y=1;y<in.h-1;y++){
-    //     for(int x=1;x<in.w-1;x++){
-    //         int sx=0, sy=0;
-    //         for(int ky=-1; ky<=1; ky++)
-    //             for(int kx=-1; kx<=1; kx++){
-    //                 int px=in.at(x+kx,y+ky);
-    //                 sx += px * Gx[ky+1][kx+1];
-    //                 sy += px * Gy[ky+1][kx+1];
-    //             }
-    //         int g = std::sqrt(sx*sx + sy*sy);
 
-    //         if(mode == 0) { 
-    //             out.at(x,y) = (g > 255) ? 255 : g;
-    //         }
-    //         else if(mode == 1) { 
-    //             out.at(x,y) = (g > thresholds[0]) ? 0 : 255;
-    //         }
-    //         else {
-    //             int bins = thresholds.size() + 1;
-    //             std::vector<int> levels(bins);
-    //             for(int i=0; i<bins; i++){
-    //                 levels[i] = (255 * i) / (bins - 1);
-    //             }
-
-    //             int idx = 0;
-    //             while(idx < thresholds.size() && g > thresholds[idx]) idx++;
-    //             out.at(x,y) = levels[idx];
-    //         }
-    //     }
-    // }
+    //border handling
+    __m256i zeros_256 = _mm256_setzero_si256();
+    __m128i zeros_128 = _mm_setzero_si128();
+    // top and bottom
+    int x = 0;
+    for (; x <= in.w - 32; x += 32) {
+        _mm256_storeu_si256((__m256i*)&out.at(x, 0), zeros_256);
+        _mm256_storeu_si256((__m256i*)&out.at(x, in.h - 1), zeros_256);
+    }
+    // store remainder with 16-byte store
+    for (; x <= in.w - 16; x += 16) {
+        _mm_storeu_si128((__m128i*)&out.at(x, 0), zeros_128);
+        _mm_storeu_si128((__m128i*)&out.at(x, in.h - 1), zeros_128);
+    }
+    // last<16
+    for (; x < in.w; ++x) {
+        out.at(x, 0) = 0;
+        out.at(x, in.h - 1) = 0;
+    }
+    // left and right border
+    for (int y = 1; y < in.h - 1; ++y) {
+        out.at(0, y) = 0;
+        out.at(in.w - 1, y) = 0;
+    }
     return out;
 }
 
 
 int main(int argc,char*argv[]){
     if(argc<4){
-        std::cerr<<"Usage: ./main n input.jpg output.jpg > output.txt\n";
+        std::cerr<<"Usage: ./avx2 n input.jpg output.jpg > output.txt\n";
         return 1;
     }
 
