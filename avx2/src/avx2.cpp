@@ -63,10 +63,10 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
 
     Image out(in.w, in.h);
 
-    std::vector<__m256i> level_vecs;
+    alignas(32) __m256i level_vecs[256];
     if constexpr (mode == 2) {
         int bins = thresholds.size() + 1;
-        level_vecs.resize(bins);
+        // level_vecs.resize(bins);
         for(int i = 0; i < bins; i++){
             level_vecs[i] = _mm256_set1_epi32((255 * i) / (bins - 1));
         }

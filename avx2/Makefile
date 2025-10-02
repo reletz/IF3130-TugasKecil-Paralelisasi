@@ -2,7 +2,7 @@ CXX := g++
 BUILD_DIR := build
 TARGET := avx2
 
-CXXFLAGS := -std=gnu++17  -mavx2 -mfma -march=native -Wall -Wextra
+CXXFLAGS := -std=gnu++17  -mavx2 -mfma -march=native
 LDFLAGS := -I$$OPENCV_INCLUDE -L$$OPENCV_LIB -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs
 
 SRC_CPP := $(wildcard src/*.cpp)
