@@ -39,16 +39,6 @@ Image sobel(const Image &in, int mode, const std::vector<int>& thresholds) {
     int Gy[3][3]={{1,2,1},{0,0,0},{-1,-2,-1}};
     Image out=in;
 
-    std::vector<int> levels;
-    int thresh_size = thresholds.size();
-    if (mode == 2){
-        int bins = thresholds.size() + 1;
-        levels.resize(bins);
-        for(int i=0; i<bins; i++){
-            levels[i] = (255 * i) / (bins - 1);
-        }
-    }
-
     for(int y=1;y<in.h-1;y++){
         for(int x=1;x<in.w-1;x++){
             int sx=0, sy=0;
@@ -58,19 +48,23 @@ Image sobel(const Image &in, int mode, const std::vector<int>& thresholds) {
                     sx += px * Gx[ky+1][kx+1];
                     sy += px * Gy[ky+1][kx+1];
                 }
-            int g_squared = sx*sx + sy*sy;
+            int g = std::sqrt(sx*sx + sy*sy);
 
-            if (mode == 0) { 
-                int g = std::sqrt(g_squared);
+            if(mode == 0) { 
                 out.at(x,y) = (g > 255) ? 255 : g;
             }
-            else if (mode == 1) { 
-                int threshold_squared = thresholds[0] * thresholds[0];
-                out.at(x,y) = (g_squared > threshold_squared) ? 0 : 255;
+            else if(mode == 1) { 
+                out.at(x,y) = (g > thresholds[0]) ? 0 : 255;
             }
             else {
+                int bins = thresholds.size() + 1;
+                std::vector<int> levels(bins);
+                for(int i=0; i<bins; i++){
+                    levels[i] = (255 * i) / (bins - 1);
+                }
+
                 int idx = 0;
-                while(idx < thresholds.size() && g_squared > thresholds[idx] * thresholds[idx]) idx++;
+                while(idx < thresholds.size() && g > thresholds[idx]) idx++;
                 out.at(x,y) = levels[idx];
             }
         }
