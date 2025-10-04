@@ -198,10 +198,10 @@ The parallel AVX2 version produces an output image that is visually and pixel-id
 #### Parallel Version
 | Image Name | Core Number | Input Time (ms) | Processing Time (ms) | Output Time (ms) | Total Time (ms) |
 |------------|-------------|-----------------|-----------------------|------------------|-----------------|
-| snake.jpg | 1           | 13                | 14                      | 13                 | 37             |
-| lion.jpg | 1           | 11                | 16                      | 12                 | 39             |
-| view.jpg | 1           | 28                | 37                      | 29                 | 94             |
-| fish.jpg | 1           | 127                | 140                      | 99                 | 366             |
+| snake.jpg | 1           | 12                | 14                      | 13                 | 39             |
+| lion.jpg | 1           | 10                | 15                      | 11                 | 36             |
+| view.jpg | 1           | 27                | 37                      | 28                 | 92             |
+| fish.jpg | 1           | 125                | 140                      | 100                 | 365             |
 | birds.jpg | 1           | 1                | 6                      | 1                 | 8              |
 
 ### 4.3 Speedup and Efficiency
@@ -221,7 +221,7 @@ Vectorization Efficiency = Speedup / Vector Width
 |Image Name|Serial Processing Time (ms)|AVX2 Processing Time (ms)|Speedup|Vector Width|Vectorization Efficiency (%)|
 |---|---|---|---|---|---|
 |snake.jpg|52|14|3.71x|8|46.4%|
-|lion.jpg|48|16|3.00x|8|37.5%|
+|lion.jpg|48|15|3.20x|8|40%|
 |view.jpg|215|37|5.81x|8|72.6%|
 |fish.jpg|452|140|3.23x|8|40.4%|
 |birds.jpg|41|6|6.83x|8|85.4%|
@@ -235,7 +235,7 @@ Vectorization Efficiency = Speedup / Vector Width
 > The primary challenge was the steep learning curve and complexity of programming with AVX2 intrinsics. The code is significantly less readable and harder to debug compared to the straightforward serial version. A deep understanding of CPU registers, data alignment, and data type management was required. Specifically, the process of loading 8-bit pixels, converting them to 32-bit integers to prevent overflow during convolution, and then carefully packing the 32-bit results back into 8-bit values for storage was complex and error-prone.
 
 - Did you notice any overhead, and how did it affect performance?
-> Yes, overhead is present and is the main reason the speedup is not a theoretical 8x. The vectorization efficiency, ranging from 37.5% to 85.4%, quantifies this. The overhead comes from several sources:
+> Yes, overhead is present and is the main reason the speedup is not a theoretical 8x. The vectorization efficiency, ranging from 40% to 85.4%, quantifies this. The overhead comes from several sources:
 > - Data Marshalling: Time is spent loading data from memory into AVX registers and storing it back.
 > - Type Conversion: Instructions to convert data between 8-bit and 32-bit formats are necessary but do not perform the core computation.
 > - Serial Remainder: The serial loop that processes pixels at the end of each row (for widths not divisible by 8) adds to the execution time and reduces overall parallelism, a concept explained by Amdahl's Law.

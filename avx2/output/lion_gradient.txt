@@ -4,7 +4,7 @@ Program Type : AVX2
 Mode         : 0
 ------------------------------------------------------
 Timing (ms)
-  Input      : 11
-  Processing : 16
-  Output     : 12
+  Input      : 10
+  Processing : 15
+  Output     : 11
 ======================================================
