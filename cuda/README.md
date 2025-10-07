@@ -210,8 +210,8 @@ The parallel CUDA version produces an output image that is visually and pixel-id
 | birds.jpg | 1                | 41                     |  0                | 42                |
 
 #### Parallel Version
-| Image Name | Input Time (ms) | Copy HtoD (ms) |Processing Time (ms) | Copy DtoH (ms) |Output Time (ms) | Total Time (ms) |
-|------------|-------------|-----------------|-----------------------|------------------|-----------------|
+| Image Name | Input Time (ms) | Copy HtoD (ms) | Processing Time (ms) | Copy DtoH (ms) |Output Time (ms) | Total Time (ms) |
+|---|---|---|---|---|---|---|
 | snake.jpg| 9.45249 | 123.442  | 0.175168  | 0.428265     | 9.65176       | 143.149253    |
 | lion.jpg | 6.68315 | 1628.53  | 0.128224  | 0.399353     | 8.49613       | 1644.236857   |
 | view.jpg | 18.6695 | 1641.73  | 0.234496  | 1.01502      | 19.5276       | 1681.176616   |
@@ -226,8 +226,8 @@ For CUDA GPU parallelization, efficiency calculation is complex due to the GPU's
 
 **Performance Analysis:**
 
-|Image Name|Serial Processing Time (ms)|CUDA Kernel Time (ms)|Speedup|
-|---|---|---|---|---|
+| Image Name | Serial Processing Time (ms) |CUDA Kernel Time (ms)| Speedup |
+|---|---|---|---|
 |snake.jpg|52|0.175168|**296.9x**|
 |lion.jpg|48|0.128224|**374.3x**|
 |view.jpg|215|0.234496|**916.7x**|
@@ -357,3 +357,4 @@ rm cuda
 - NVIDIA GPU with CUDA Compute Capability 3.0 or higher
 - CUDA Toolkit 10.0 or later
 - Sufficient GPU memory to hold the input image data
+
