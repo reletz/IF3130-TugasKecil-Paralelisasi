@@ -294,10 +294,11 @@ The consistent ~1600ms HtoD transfer times across different image sizes suggest:
 
 ### Scalability Insights
 The results show that CUDA parallelization scales excellently with image size for the computational aspect:
-- birds.jpg (256x256): 203x speedup
-- snake.jpg/lion.jpg (512x512): 297-374x speedup  
-- view.jpg (1024x1024): 917x speedup
-- fish.jpg (2048x2048): 1082x speedup
+- birds.jpg (356x200): 203x speedup
+- snake.jpg (1000x750): 297x speedup
+- lion.jpg (1200x528): 374x speedup  
+- view.jpg (1680x1050): 917x speedup
+- fish.jpg (3086x2318): 1082x speedup
 
 This demonstrates that larger problem sizes better utilize GPU resources and achieve higher parallel efficiency.
 
