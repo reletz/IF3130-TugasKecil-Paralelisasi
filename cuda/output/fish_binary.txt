@@ -1,15 +1,15 @@
 ================ Sobel Edge Detection ================
 Program Type : CUDA
 ------------------------------------------------------
-Mode         : 2
-Grid Size    : 23x13
+Mode         : 1
+Grid Size    : 193x145
 Block Size   : 16x16
-Threshold(s) : 127 
+Threshold(s) : 128 
 ------------------------------------------------------
 Timing (ms)
-  Input (Load)     : 4.07439
-  Copy HtoD        : 1174.4
-  Processing (GPU) : 1.79302
-  Copy DtoH        : 0.204067
-  Output (Save)    : 1.31367
+  Input (Load)     : 102.938
+  Copy HtoD        : 1635.24
+  Processing (GPU) : 0.417792
+  Copy DtoH        : 2.55932
+  Output (Save)    : 66.0399
 ======================================================
