@@ -1,4 +1,4 @@
-# Parallelization Report — Sobel Edge Detection with Open MPI
+# Parallelization Report — Sobel Edge Detection with AVX2
 
 ## Team Information
 - **Team ID: pacuanCUDA**  
