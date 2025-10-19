@@ -97,37 +97,44 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
         }
     };
 
-    bool hasRemainder = (in.w - 1) % 8 != 0;
-    int mainLoopEnd = in.w - 9;
-    int remainderStart = in.w - 9;
+    auto load_8bytes_to_epi32 = [](const unsigned char* ptr) -> __m256i {
+        alignas(32) uint64_t temp[4] = {0};
+        temp[0] = *reinterpret_cast<const uint64_t*>(ptr);
+        __m256i loaded = _mm256_loadu_si256((__m256i*)temp);
+        return _mm256_cvtepu8_epi32(_mm256_castsi256_si128(loaded));
+    };
 
-    for(int y=1;y<in.h-1;y++){
+    auto store_8bytes_from_epi32 = [](unsigned char* ptr, __m256i vec) {
+        __m256i zeros = _mm256_setzero_si256();
+        __m256i packed_16 = _mm256_packus_epi32(vec, zeros);
+        packed_16 = _mm256_permute4x64_epi64(packed_16, 0xD8);
+        __m256i packed_8 = _mm256_packus_epi16(packed_16, zeros);
+        alignas(32) uint64_t temp[4];
+        _mm256_store_si256((__m256i*)temp, packed_8);
+        *reinterpret_cast<uint64_t*>(ptr) = temp[0];
+    };
+
+    int num_blocks = (in.w - 2) / 8;
+    int remainder = (in.w - 2) % 8;
+
+    for(int y=1; y<in.h-1; y++){
         int x = 1;
-        for(;x<=mainLoopEnd;x+=8){
-            __m128i v_tl_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y - 1));
-            __m128i v_tc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y - 1));
-            __m128i v_tr_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y - 1));
+        // Main loop: process 8 pixels at a time
+        for(int block=0; block<num_blocks; block++, x+=8){
+            // Load 9 neighbors for 8 pixels using AVX2 only
+            __m256i v_tl = load_8bytes_to_epi32(&in.at(x - 1, y - 1));
+            __m256i v_tc = load_8bytes_to_epi32(&in.at(x,     y - 1));
+            __m256i v_tr = load_8bytes_to_epi32(&in.at(x + 1, y - 1));
             
-            __m128i v_ml_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y));
-            __m128i v_mc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y));
-            __m128i v_mr_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y));
-
-            __m128i v_bl_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y + 1));
-            __m128i v_bc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y + 1));
-            __m128i v_br_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y + 1));
-
-            __m256i v_tl = _mm256_cvtepu8_epi32(v_tl_8b);
-            __m256i v_tc = _mm256_cvtepu8_epi32(v_tc_8b);
-            __m256i v_tr = _mm256_cvtepu8_epi32(v_tr_8b);
-
-            __m256i v_ml = _mm256_cvtepu8_epi32(v_ml_8b);
-            __m256i v_mc = _mm256_cvtepu8_epi32(v_mc_8b);
-            __m256i v_mr = _mm256_cvtepu8_epi32(v_mr_8b);
+            __m256i v_ml = load_8bytes_to_epi32(&in.at(x - 1, y));
+            __m256i v_mc = load_8bytes_to_epi32(&in.at(x,     y));
+            __m256i v_mr = load_8bytes_to_epi32(&in.at(x + 1, y));
             
-            __m256i v_bl = _mm256_cvtepu8_epi32(v_bl_8b);
-            __m256i v_bc = _mm256_cvtepu8_epi32(v_bc_8b);
-            __m256i v_br = _mm256_cvtepu8_epi32(v_br_8b);
+            __m256i v_bl = load_8bytes_to_epi32(&in.at(x - 1, y + 1));
+            __m256i v_bc = load_8bytes_to_epi32(&in.at(x,     y + 1));
+            __m256i v_br = load_8bytes_to_epi32(&in.at(x + 1, y + 1));
 
+            // Compute Sobel gradients
             __m256i sx_vec = _mm256_setzero_si256();
             __m256i sy_vec = _mm256_setzero_si256();
 
@@ -152,49 +159,40 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
             sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_br, Gx[8]));
             sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_br, Gy[8]));
 
+            // Compute gradient magnitude squared
             __m256i sx_sq = _mm256_mullo_epi32(sx_vec, sx_vec);
             __m256i sy_sq = _mm256_mullo_epi32(sy_vec, sy_vec);
-            __m256i g = _mm256_add_epi32(sx_sq, sy_sq);
-
             __m256i g_squared = _mm256_add_epi32(sx_sq, sy_sq);
+            
+            // Apply mode-specific processing
             __m256i g_vec = levels_mode(g_squared);
 
-            __m256i zeros_256 = _mm256_setzero_si256();
-            __m256i res_16bit_lanes = _mm256_packus_epi32(g_vec, zeros_256);
-            //move upper lane lower 64 bits to lower lane upper 64 bits
-            __m256i permuted = _mm256_permute4x64_epi64(res_16bit_lanes, 0xD8); // 11011000
-            __m128i res_16bit = _mm256_castsi256_si128(permuted);
-
-            __m128i zeros_128 = _mm_setzero_si128();
-            __m128i finalP = _mm_packus_epi16(res_16bit, zeros_128);
-            _mm_storel_epi64((__m128i*)&out.at(x, y), finalP);
+            store_8bytes_from_epi32(&out.at(x, y), g_vec);
         }
-        if (hasRemainder){ 
-            x = remainderStart;
-            __m128i v_tl_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y - 1));
-            __m128i v_tc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y - 1));
-            __m128i v_tr_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y - 1));
+        
+        // Handle remaining pixels (< 8) using masked operations
+        if (remainder > 0) {
+            // Create mask for remaining pixels
+            alignas(32) int mask_data[8] = {0};
+            for (int i = 0; i < remainder; i++) {
+                mask_data[i] = -1;
+            }
+            __m256i mask = _mm256_load_si256((__m256i*)mask_data);
             
-            __m128i v_ml_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y));
-            __m128i v_mc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y));
-            __m128i v_mr_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y));
-
-            __m128i v_bl_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y + 1));
-            __m128i v_bc_8b = _mm_loadl_epi64((__m128i const*)&in.at(x,     y + 1));
-            __m128i v_br_8b = _mm_loadl_epi64((__m128i const*)&in.at(x + 1, y + 1));
-
-            __m256i v_tl = _mm256_cvtepu8_epi32(v_tl_8b);
-            __m256i v_tc = _mm256_cvtepu8_epi32(v_tc_8b);
-            __m256i v_tr = _mm256_cvtepu8_epi32(v_tr_8b);
-
-            __m256i v_ml = _mm256_cvtepu8_epi32(v_ml_8b);
-            __m256i v_mc = _mm256_cvtepu8_epi32(v_mc_8b);
-            __m256i v_mr = _mm256_cvtepu8_epi32(v_mr_8b);
+            // Load with boundary check (load full 8 but only use 'remainder' pixels)
+            __m256i v_tl = load_8bytes_to_epi32(&in.at(x - 1, y - 1));
+            __m256i v_tc = load_8bytes_to_epi32(&in.at(x,     y - 1));
+            __m256i v_tr = load_8bytes_to_epi32(&in.at(x + 1, y - 1));
             
-            __m256i v_bl = _mm256_cvtepu8_epi32(v_bl_8b);
-            __m256i v_bc = _mm256_cvtepu8_epi32(v_bc_8b);
-            __m256i v_br = _mm256_cvtepu8_epi32(v_br_8b);
+            __m256i v_ml = load_8bytes_to_epi32(&in.at(x - 1, y));
+            __m256i v_mc = load_8bytes_to_epi32(&in.at(x,     y));
+            __m256i v_mr = load_8bytes_to_epi32(&in.at(x + 1, y));
+            
+            __m256i v_bl = load_8bytes_to_epi32(&in.at(x - 1, y + 1));
+            __m256i v_bc = load_8bytes_to_epi32(&in.at(x,     y + 1));
+            __m256i v_br = load_8bytes_to_epi32(&in.at(x + 1, y + 1));
 
+            // Compute Sobel gradients
             __m256i sx_vec = _mm256_setzero_si256();
             __m256i sy_vec = _mm256_setzero_si256();
 
@@ -219,49 +217,57 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
             sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_br, Gx[8]));
             sy_vec = _mm256_add_epi32(sy_vec, _mm256_mullo_epi32(v_br, Gy[8]));
 
+            // Compute gradient magnitude squared
             __m256i sx_sq = _mm256_mullo_epi32(sx_vec, sx_vec);
             __m256i sy_sq = _mm256_mullo_epi32(sy_vec, sy_vec);
-            __m256i g = _mm256_add_epi32(sx_sq, sy_sq);
-
             __m256i g_squared = _mm256_add_epi32(sx_sq, sy_sq);
+            
+            // Apply mode-specific processing
             __m256i g_vec = levels_mode(g_squared);
 
-            __m256i zeros_256 = _mm256_setzero_si256();
-            __m256i res_16bit_lanes = _mm256_packus_epi32(g_vec, zeros_256);
-            //move upper lane lower 64 bits to lower lane upper 64 bits
-            __m256i permuted = _mm256_permute4x64_epi64(res_16bit_lanes, 0xD8); // 11011000
-            __m128i res_16bit = _mm256_castsi256_si128(permuted);
-
-            __m128i zeros_128 = _mm_setzero_si128();
-            __m128i finalP = _mm_packus_epi16(res_16bit, zeros_128);
-            _mm_storel_epi64((__m128i*)&out.at(x, y), finalP);
+            // Masked store for remainder pixels
+            alignas(32) int result_temp[8];
+            _mm256_store_si256((__m256i*)result_temp, g_vec);
+            for (int i = 0; i < remainder; i++) {
+                out.at(x + i, y) = static_cast<unsigned char>(result_temp[i]);
+            }
         }
     }
 
-    //border handling
-    __m256i zeros_256 = _mm256_setzero_si256();
-    __m128i zeros_128 = _mm_setzero_si128();
-    // top and bottom
+    // Border handling
+    __m256i zeros = _mm256_setzero_si256();
+    
+    // Top and bottom borders
     int x = 0;
     for (; x <= in.w - 32; x += 32) {
-        _mm256_storeu_si256((__m256i*)&out.at(x, 0), zeros_256);
-        _mm256_storeu_si256((__m256i*)&out.at(x, in.h - 1), zeros_256);
+        _mm256_storeu_si256((__m256i*)&out.at(x, 0), zeros);
+        _mm256_storeu_si256((__m256i*)&out.at(x, in.h - 1), zeros);
     }
-    // store remainder with 16-byte store
-    for (; x <= in.w - 16; x += 16) {
-        _mm_storeu_si128((__m128i*)&out.at(x, 0), zeros_128);
-        _mm_storeu_si128((__m128i*)&out.at(x, in.h - 1), zeros_128);
+    // Remaining top/bottom pixels with masked store
+    if (x < in.w) {
+        int rem = in.w - x;
+        alignas(32) int mask_data[8] = {0};
+        for (int i = 0; i < std::min(8, rem); i++) {
+            mask_data[i] = -1;
+        }
+        __m256i mask = _mm256_load_si256((__m256i*)mask_data);
+        
+        for (; x < in.w; x += 8) {
+            int to_write = std::min(8, in.w - x);
+            alignas(32) unsigned char zero_bytes[32] = {0};
+            for (int i = 0; i < to_write; i++) {
+                out.at(x + i, 0) = 0;
+                out.at(x + i, in.h - 1) = 0;
+            }
+        }
     }
-    // last<16
-    for (; x < in.w; ++x) {
-        out.at(x, 0) = 0;
-        out.at(x, in.h - 1) = 0;
-    }
-    // left and right border
+    
+    // Left and right borders (single pixels per row)
     for (int y = 1; y < in.h - 1; ++y) {
         out.at(0, y) = 0;
         out.at(in.w - 1, y) = 0;
     }
+    
     return out;
 }
 
