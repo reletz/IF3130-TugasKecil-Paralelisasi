@@ -101,16 +101,13 @@ template<int mode>
 Image sobel(const Image &in, const std::vector<int>& thresholds) {
     // ... Kernel setup ...
     for(int y=1; y<in.h-1; y++){
-        for(int x=1; x<=mainLoopEnd; x+=8){
+        int x = 1;
+        for(int block=0; block<num_blocks; block++, x+=8){
             // 1. Load 8-bit pixels from 9 neighboring positions
-            __m128i v_tl_8b = _mm_loadl_epi64((__m128i const*)&in.at(x - 1, y - 1));
+           __m256i v_tl = load_8bytes_to_epi32(&in.at(x - 1, y - 1));
             // ... (load all 9 pixel blocks)
 
-            // 2. Convert to 32-bit integers for calculation
-            __m256i v_tl = _mm256_cvtepu8_epi32(v_tl_8b);
-            // ... (convert all 9 blocks)
-
-            // 3. Perform full 3x3 convolution using vector multiplication and addition
+            // 2. Perform full 3x3 convolution using vector multiplication and addition
             __m256i sx_vec = _mm256_setzero_si256();
             __m256i sy_vec = _mm256_setzero_si256();
             sx_vec = _mm256_add_epi32(sx_vec, _mm256_mullo_epi32(v_tl, Gx[0]));
@@ -120,20 +117,14 @@ Image sobel(const Image &in, const std::vector<int>& thresholds) {
             // 4. Calculate gradient magnitude with vector sqrt
             __m256i sx_sq = _mm256_mullo_epi32(sx_vec, sx_vec);
             __m256i sy_sq = _mm256_mullo_epi32(sy_vec, sy_vec);
-            __m256i g = _mm256_add_epi32(sx_sq, sy_sq);
-            __m256i g_vec = _mm256_cvttps_epi32(_mm256_sqrt_ps(_mm256_cvtepi32_ps(g)));
+            __m256i g_squared = _mm256_add_epi32(sx_sq, sy_sq);
 
             // 5. Apply thresholding based on compile-time mode
-            if constexpr (mode == 1){
-                __m256i threshold_vec = _mm256_set1_epi32(thresholds[0]);
-                __m256i mask = _mm256_cmpgt_epi32(g_vec, threshold_vec);
-                g_vec = _mm256_blendv_epi8(val_255, zeros, mask);
-            }
-            // ... (other modes)
+            __m256i g_vec = levels_mode(g_squared);
 
             // 6. Pack 32-bit results back to 8-bit and store
             // ... (packing and permuting logic)
-            _mm_storel_epi64((__m128i*)&out.at(x, y), finalP);
+            store_8bytes_from_epi32(&out.at(x, y), g_vec);
         }
         // ... (Remainder handling loop)
     }
@@ -210,7 +201,7 @@ The parallel AVX2 version produces an output image that is visually and pixel-id
 - **Efficiency**:
 
 Since we cannot change the number of processors used in AVX2, we must use a different method to calculate its efficiency. This is determined by the vector width, which is the number of data elements processed in a single instruction.
-1. For our main calculations (multiplication and addition), we convert the 8-bit pixels to 32-bit integers using `_mm256_cvtepu8_epi32`.
+1. For our main calculations (multiplication and addition), we convert the 8-bit pixels to 32-bit integers using `load_8bytes_to_epi32`.
 2. The number of 32-bit integers that can fit into a 256-bit register is: 256 bits / 32 bits = 8.
 3. Our main loop iterates by jumping 8 pixels at a time (`x+=8`), which matches this hardware capability. Therefore, our effective vector width is 8.
 
