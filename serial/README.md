@@ -67,3 +67,37 @@
 ### 4.3 Speedup and Efficiency
 - **Speedup** = Serial Time / Parallel Time  
 - **Efficiency** = Speedup / Number of Processes  
+
+
+## TEST CASE DEMO
+
+fish dan view
+
+SERIAL
+./serial/serial 0 test_cases/fish.jpg ./test_cases/serial/fish.jpg > ./test_cases/serial/fish.txt && ./serial/serial 128 test_cases/view.jpg ./test_cases/serial/view.jpg > ./test_cases/serial/view.txt
+
+MPI
+mpirun --hostfile hostfile -np 2 --mca btl_tcp_if_include eth1 ./src/mpi 0 test_cases/fish.jpg tc_results/fish2.jpg > tc_results/fish2.txt
+mpirun --hostfile hostfile -np 3 --mca btl_tcp_if_include eth1 ./src/mpi 0 test_cases/fish.jpg tc_results/fish3.jpg > tc_results/fish3.txt
+mpirun --hostfile hostfile -np 4 --mca btl_tcp_if_include eth1 ./src/mpi 0 test_cases/fish.jpg tc_results/fish4.jpg > tc_results/fish4.txt
+
+mpirun --hostfile hostfile -np 2 --mca btl_tcp_if_include eth1 ./src/mpi 128 test_cases/view.jpg tc_results/view2.jpg > tc_results/view2.txt
+mpirun --hostfile hostfile -np 3 --mca btl_tcp_if_include eth1 ./src/mpi 128 test_cases/view.jpg tc_results/view3.jpg > tc_results/view3.txt
+mpirun --hostfile hostfile -np 4 --mca btl_tcp_if_include eth1 ./src/mpi 128  test_cases/view.jpg tc_results/view4.jpg > tc_results/view4.txt
+
+OPEN MP
+./open_mp/open_mp 4 0 test_cases/fish.jpg test_cases/open_mp/fish4.jpg > test_cases/open_mp/fish4.txt
+./open_mp/open_mp 8 0 test_cases/fish.jpg test_cases/open_mp/fish8.jpg > test_cases/open_mp/fish8.txt
+./open_mp/open_mp 16 0 test_cases/fish.jpg test_cases/open_mp/fish16.jpg > test_cases/open_mp/fish16.txt
+
+./open_mp/open_mp 4 128 test_cases/view.jpg test_cases/open_mp/view4.jpg > test_cases/open_mp/view4.txt
+./open_mp/open_mp 8 128 test_cases/view.jpg test_cases/open_mp/view8.jpg > test_cases/open_mp/view8.txt
+./open_mp/open_mp 16 128 test_cases/view.jpg test_cases/open_mp/view16.jpg > test_cases/open_mp/view16.txt
+
+AVX2
+./avx2/avx2 0 test_cases/fish.jpg ./test_cases/avx2/fish.jpg > ./test_cases/avx2/fish.txt
+./avx2/avx2 128 test_cases/view.jpg ./test_cases/avx2/view.jpg > ./test_cases/avx2/view.txt
+
+CUDA
+./cuda/cuda 0 test_cases/fish.jpg ./test_cases/cuda/fish.jpg > ./test_cases/cuda/fish.txt
+./cuda/cuda 128 test_cases/view.jpg ./test_cases/cuda/view.jpg > ./test_cases/cuda/view.txt

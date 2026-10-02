@@ -161,7 +161,7 @@ distribute:
 pull:
 	@echo "--- Menarik hasil dari VM master ke host... ---"
 	@mkdir -p ./results/
-	@${RSYNC_CMD} mpiuser@localhost:~/result/ ./results/
+	@${RSYNC_CMD} mpiuser@localhost:~/tc_results/ ./results/
 	@echo "--- [SUCCESS] Hasil telah ditarik ke direktori './results/'. ---"
 
 remote-build: sync
